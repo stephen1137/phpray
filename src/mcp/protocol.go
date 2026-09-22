@@ -181,9 +181,17 @@ func (s *server) odpowiedz(req rpcRequest) *rpcResponse {
 	case "initialize":
 		return ok(map[string]any{
 			"protocolVersion": wersjaKlienta(req.Params),
-			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo":      map[string]any{"name": "phpray", "version": version},
-			"instructions":    instrukcje(s.demo),
+			"capabilities": map[string]any{
+				"tools": map[string]any{},
+				// Prompty: gotowe pytania, ktore klient pokazuje czlowiekowi.
+				// Bez tego uzytkownik, ktory nas dodal, zostaje z dziesiecioma
+				// nazwami narzedzi i zadna podpowiedzia — a dokladnie tak
+				// wygladal kazdy pomiar od wpisania nas do rejestru: wszyscy
+				// konczyli na tools/list, nikt nie wywolal narzedzia.
+				"prompts": map[string]any{},
+			},
+			"serverInfo":   map[string]any{"name": "phpray", "version": version},
+			"instructions": instrukcje(s.demo),
 		})
 	case "notifications/initialized", "notifications/cancelled":
 		// notifications carry no id and expect no answer
@@ -198,6 +206,31 @@ func (s *server) odpowiedz(req rpcRequest) *rpcResponse {
 			})
 		}
 		return ok(map[string]any{"tools": list})
+	case "prompts/list":
+		list := make([]map[string]any, 0, len(prompty()))
+		for _, p := range prompty() {
+			list = append(list, map[string]any{
+				"name": p.Name, "title": p.Title, "description": p.Description,
+			})
+		}
+		return ok(map[string]any{"prompts": list})
+	case "prompts/get":
+		var par struct {
+			Name string `json:"name"`
+		}
+		_ = json.Unmarshal(req.Params, &par)
+		for _, p := range prompty() {
+			if p.Name == par.Name {
+				return ok(map[string]any{
+					"description": p.Description,
+					"messages": []map[string]any{{
+						"role":    "user",
+						"content": map[string]any{"type": "text", "text": p.Tresc},
+					}},
+				})
+			}
+		}
+		return zle(-32602, "unknown prompt: "+par.Name+"; call prompts/list for the names")
 	case "tools/call":
 		var p struct {
 			Name      string         `json:"name"`

@@ -29,9 +29,24 @@ var (
 )
 
 func zbudujNarzedzia(k *klient) []toolSpec {
+	// Konsola czyta okno z ?from i ?to (sekundy uniksowe), NIE z ?window.
+	//
+	// Do 22.09.2026 wysylalismy tu ?window=<minuty>. Konsola ten parametr
+	// ignorowala i brala swoje domyslne 24 godziny, wiec window_minutes —
+	// ogloszone w schemacie KAZDEGO narzedzia — nie robilo nic. Widac to
+	// bylo dopiero po porownaniu: okno 5 minut i okno 1440 minut oddawaly
+	// identyczne liczby (6846 zadan, 21 adresow). Agent zapytany "czy cos
+	// sie pogorszylo w ostatniej godzinie" porownywal dwa razy te sama dobe
+	// i odpowiadal "nic sie nie zmienilo" — z pelnym przekonaniem.
 	okno := func(args map[string]any, domyslne int) url.Values {
+		minut := liczba(args, "window_minutes", domyslne)
+		if minut <= 0 {
+			minut = domyslne
+		}
+		teraz := time.Now().Unix()
 		q := url.Values{}
-		q.Set("window", fmt.Sprintf("%d", liczba(args, "window_minutes", domyslne)))
+		q.Set("from", fmt.Sprintf("%d", teraz-int64(minut)*60))
+		q.Set("to", fmt.Sprintf("%d", teraz))
 		return q
 	}
 	idSerwisu := func(args map[string]any) (string, error) {
@@ -426,14 +441,24 @@ func podsumowaniePrzegladu(surowe json.RawMessage, ileURI, ileKomponentow int) (
 		}
 	}
 	if ileKomponentow > 0 && len(o.Components) > 0 {
-		fmt.Fprintf(&b, "\nWhere the time goes (%d of %d components, profiled requests only):\n%-44s %11s %11s %7s\n",
-			min(ileKomponentow, len(o.Components)), len(o.Components), "component", "self total", "incl total", "avg self")
+		// Czasy przez czasSumy, tak samo jak w phpray_components.
+		//
+		// Do 22.09.2026 stalo tu %11.0f na surowym SelfMs i agent dostawal
+		// "2536828" bez jednostki. To sa milisekundy, czyli czterdziesci dwie
+		// minuty — a dedykowane narzedzie te sama liczbe pokazuje jako
+		// "42.3 min". Dwa nasze narzedzia podawaly ten sam fakt w dwoch
+		// formatach, z ktorych jeden byl nieczytelny: model, ktory przeczyta
+		// "2536828 self total", poda uzytkownikowi dwa i pol miliona czegos.
+		fmt.Fprintf(&b, "\nWhere the time goes (%d of %d components, profiled requests only):\n%-44s %11s %11s %13s\n",
+			min(ileKomponentow, len(o.Components)), len(o.Components), "component", "self total", "incl total", "avg self/req")
 		for i, c := range o.Components {
 			if i >= ileKomponentow {
 				break
 			}
-			fmt.Fprintf(&b, "%-44s %11.0f %11.0f %7.1f\n", przytnij(c.Name, 44), c.SelfMs, c.InclMs, c.AvgSelfMs)
+			fmt.Fprintf(&b, "%-44s %11s %11s %10.2f ms\n",
+				przytnij(c.Name, 44), czasSumy(c.SelfMs), czasSumy(c.InclMs), c.AvgSelfMs)
 		}
+		fmt.Fprintf(&b, "\nphpray_components has the full list with how many requests were profiled.\n")
 	}
 	if o.Stats != nil && o.Stats.Profiled == 0 {
 		b.WriteString("\nNo profiled requests in this window, so there is no component breakdown. " +

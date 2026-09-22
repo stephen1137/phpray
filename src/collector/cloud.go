@@ -91,11 +91,17 @@ type CloudStatus struct {
 	SentTraces       int64  `json:"sent_traces"`
 	SentAggregates   int64  `json:"sent_aggregates"`
 	DroppedTraces    int64  `json:"dropped_traces"`
-	BufferedFiles    int    `json:"buffered_files"`
-	BufferedBytes    int64  `json:"buffered_bytes"`
-	PendingTraces    int    `json:"pending_traces"`
-	Sites            int    `json:"sites"`
-	ControlMessages  int64  `json:"control_messages"`
+	// DroppedQuota liczy sie OSOBNO od DroppedTraces, bo znaczy zupelnie co
+	// innego i wymaga innego dzialania. Przepelniony bufor to sprawa lokalna,
+	// przejdzie sama. Odrzucenie przez limit planu to "Twoje konto nie obejmuje
+	// tej strony" — i dopoki tego nie widac, uzytkownik widzi tylko, ze strony
+	// NIE MA w konsoli, i uznaje produkt za zepsuty zamiast zmienic plan.
+	DroppedQuota    int64 `json:"dropped_quota"`
+	BufferedFiles   int   `json:"buffered_files"`
+	BufferedBytes   int64 `json:"buffered_bytes"`
+	PendingTraces   int   `json:"pending_traces"`
+	Sites           int   `json:"sites"`
+	ControlMessages int64 `json:"control_messages"`
 }
 
 // CloudStatusProvider is implemented by the shipper (or a nil provider in api-only mode).
@@ -941,7 +947,9 @@ func (s *Shipper) deliver(path string, payload []byte) error {
 				DroppedQuota int `json:"dropped_quota"`
 			}
 			if json.Unmarshal(respBody, &r) == nil && r.DroppedQuota > 0 {
-				s.st.DroppedTraces += int64(r.DroppedQuota)
+				s.st.DroppedQuota += int64(r.DroppedQuota)
+				s.logf("cloud: %d trace(s) not accepted — the account's plan does not "+
+					"cover this site; plans: https://phpray.dev/en/pricing", r.DroppedQuota)
 			}
 		}
 		s.mu.Unlock()

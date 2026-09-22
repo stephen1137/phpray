@@ -152,7 +152,18 @@ func cmdTop(args []string) {
 		// mowilo o Cloudzie nic — wiec nikt nie wiedzial, ze istnieje cos
 		// ponad biezaca minute na tej jednej maszynie. Mowimy CO dochodzi,
 		// nie "polacz sie": historia, flota, alerty. Bez tego to tylko reklama.
-		if !cloudSkonfigurowany(*cfgPath) {
+		// Najpierw rzecz pilna: Cloud odrzucil dane z powodu limitu planu.
+		// To nie jest reklama, tylko wyjasnienie, dlaczego strony nie widac.
+		odrzucone, wyczerpany := odrzuconePrzezPlan(*addr)
+		if wyczerpany {
+			fmt.Println("\n  PHPRay Cloud stopped accepting traces: the account's plan is exhausted")
+			fmt.Println("  or unpaid. Per-minute aggregates still go through, individual traces")
+			fmt.Println("  do not. Plans and limits:  https://phpray.dev/en/pricing")
+		} else if odrzucone > 0 {
+			fmt.Printf("\n  %d trace(s) were NOT accepted by PHPRay Cloud: the account's plan does\n", odrzucone)
+			fmt.Println("  not cover this site, so it is missing from the console. Plans and limits:")
+			fmt.Println("  https://phpray.dev/en/pricing")
+		} else if !cloudSkonfigurowany(*cfgPath) {
 			fmt.Printf("\n  This is the last %ds on this machine. PHPRay Cloud keeps the history,\n", *windowSec)
 			// NIE "sends alerts": alerty sa liczone, gdy ktos otworzy strone,
 			// nic nie jest wysylane. Dokumentacja mowi to wprost ("e-mail and
@@ -224,6 +235,37 @@ func readRecentTraces(path string, windowSec int64, domain string) []topEntry {
 	}
 
 	return entries
+}
+
+// odrzuconePrzezPlan pyta kolektor, ile sladow Cloud odrzucil z powodu limitu
+// planu konta.
+//
+// Po co: gdy konto Free dostaje drugi serwis, konsola odrzuca go W CISZY —
+// zlicza do dropped_quota i nic nie odpowiada. Kolektor te liczbe zapisywal
+// i nie pokazywal NIGDZIE: ani w `phpray top`, ani w panelu lokalnym.
+// Uzytkownik widzial tylko, ze strony w konsoli NIE MA, i mial pelne prawo
+// uznac, ze produkt jest zepsuty — zamiast dowiedziec sie, ze wystarczy
+// zmienic plan. To jest najdrozsza cisza, jaka w tym produkcie znalazlem.
+// Dwie sytuacje, obie dotad niewidoczne: limit STRON (konsola po cichu
+// odrzuca serwis ponad plan) i HTTP 402, czyli plan wyczerpany albo
+// nieoplacony (slady zatrzymane w calosci, ida same agregaty).
+func odrzuconePrzezPlan(addr string) (int64, bool) {
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://" + addr + "/api/v1/health")
+	if err != nil {
+		return 0, false
+	}
+	defer resp.Body.Close()
+	var h struct {
+		Cloud struct {
+			DroppedQuota  int64 `json:"dropped_quota"`
+			PlanExhausted bool  `json:"plan_exhausted"`
+		} `json:"cloud"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&h) != nil {
+		return 0, false
+	}
+	return h.Cloud.DroppedQuota, h.Cloud.PlanExhausted
 }
 
 // sprawdzKolektor zwraca pusty łańcuch, gdy API odpowiada, a w przeciwnym razie
@@ -337,7 +379,6 @@ func tokenLokalny(cfgPath string) string {
 	}
 	return tok
 }
-
 
 // cloudSkonfigurowany mowi, czy w collector.toml jest wlaczona sekcja [cloud].
 // Gdy jest, `phpray top` nie wspomina o Cloudzie ani slowem: czlowiek, ktory

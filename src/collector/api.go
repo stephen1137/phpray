@@ -1153,24 +1153,27 @@ func (a *API) handleDiagReport(w http.ResponseWriter, r *http.Request) {
 	report := engine.Analyze(ctx)
 	report.WindowMin = windowMin
 
-	var content string
-	if format == "text" {
-		content = GeneratePlainTextReport(report)
-	} else {
-		content = GenerateMarkdownReport(report)
+	// HTML jest formatem, ktory WEDRUJE DALEJ: jeden samowystarczalny plik ze
+	// stopka "safe to forward" i odnosnikami z utm_source=report. Ma go CLI
+	// (phpray report -format html), wtyczka DirectAdmin i konsola Cloud —
+	// a ta koncowka, z ktorej korzysta lokalny panel, oddawala tylko markdown.
+	// Czyli akurat tam, gdzie trafia KAZDY, kto zainstalowal PHPRaya sam,
+	// jedyny artefakt do wyslania komus byl plikiem .md bez ani jednego
+	// odnosnika do nas. Zauwazone 22.09.2026.
+	var content, typ, rozsz string
+	switch format {
+	case "text":
+		content, typ, rozsz = GeneratePlainTextReport(report), "text/plain; charset=utf-8", "txt"
+	case "html":
+		content = GenerateHTMLReport(report, r.URL.Query().Get("anonymize") == "1", version)
+		typ, rozsz = "text/html; charset=utf-8", "html"
+	default:
+		content, typ, rozsz = GenerateMarkdownReport(report), "text/markdown; charset=utf-8", "md"
 	}
 
-	if format == "text" {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	} else {
-		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-	}
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"phpray-report-%s.%s\"", domain, func() string {
-		if format == "text" {
-			return "txt"
-		}
-		return "md"
-	}()))
+	w.Header().Set("Content-Type", typ)
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf("attachment; filename=\"phpray-report-%s.%s\"", domain, rozsz))
 	w.Write([]byte(content))
 }
 

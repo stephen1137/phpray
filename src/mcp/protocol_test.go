@@ -259,3 +259,71 @@ func TestDziennikSpadaNaNazweKlientaHTTP(t *testing.T) {
 		t.Errorf("do dziennika ma trafic sama nazwa, nie caly naglowek: %s", linia)
 	}
 }
+
+// Przez cala dobe od wpisania nas do rejestru MCP kazdy klient — szesc
+// katalogow i dwoch ludzi z lacz domowych — konczyl na tools/list. Ani
+// jednego tools/call. Klient laczy sie przy starcie i pobiera liste, a
+// czlowiek zostaje z dziesiecioma nazwami typu phpray_slow_queries i zadna
+// podpowiedzia. Prompty sa w specyfikacji wlasnie na to.
+func TestSerwerOglaszaIOddajePrompty(t *testing.T) {
+	s := &server{tools: zbudujNarzedzia(nowyKlient("http://127.0.0.1:1", "x")), demo: true}
+
+	odp := s.odpowiedz(rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "initialize"})
+	caps := odp.Result.(map[string]any)["capabilities"].(map[string]any)
+	if _, jest := caps["prompts"]; !jest {
+		t.Fatal("initialize nie oglasza zdolnosci prompts — klient nie zapyta o liste")
+	}
+
+	odp = s.odpowiedz(rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("2"), Method: "prompts/list"})
+	if odp.Error != nil {
+		t.Fatalf("prompts/list: %+v", odp.Error)
+	}
+	lista := odp.Result.(map[string]any)["prompts"].([]map[string]any)
+	if len(lista) < 3 {
+		t.Fatalf("za malo promptow: %d", len(lista))
+	}
+	for _, p := range lista {
+		for _, pole := range []string{"name", "title", "description"} {
+			if s, _ := p[pole].(string); s == "" {
+				t.Errorf("prompt %v bez pola %q", p["name"], pole)
+			}
+		}
+	}
+
+	// Kazdy prompt MUSI dzialac na koncie demo, bez tokenu — bo dokladnie tam
+	// trafia ktos, kto nas wlasnie dodal. Czyli nie moze wolac narzedzia
+	// zapisu, ktorego sesja bez tokenu w ogole nie widzi.
+	// UWAGA: liste widocznych budujemy TAK SAMO jak warstwa HTTP, czyli
+	// odsiewajac narzedzia zapisu. Pierwsza wersja brala po prostu s.tools
+	// — a filtrowanie dzieje sie w http.go, nie w zbudujNarzedzia — wiec
+	// phpray_profile_url byl "widoczny" i asercja nie mogla nigdy paść.
+	widoczne := map[string]bool{}
+	for _, n := range s.tools {
+		if s.demo && n.zapis {
+			continue
+		}
+		widoczne[n.Name] = true
+	}
+	for _, p := range prompty() {
+		odp = s.odpowiedz(rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("3"), Method: "prompts/get",
+			Params: json.RawMessage(`{"name":"` + p.Name + `"}`)})
+		if odp.Error != nil {
+			t.Fatalf("prompts/get %s: %+v", p.Name, odp.Error)
+		}
+		tresc := odp.Result.(map[string]any)["messages"].([]map[string]any)[0]["content"].(map[string]any)["text"].(string)
+		if !strings.Contains(tresc, "phpray_") {
+			t.Errorf("prompt %s nie kieruje do zadnego narzedzia", p.Name)
+		}
+		for _, slowo := range strings.Fields(strings.ReplaceAll(tresc, ".", " ")) {
+			if strings.HasPrefix(slowo, "phpray_") && !widoczne[strings.Trim(slowo, ",;:")] {
+				t.Errorf("prompt %s wola %s, ktorego sesja demo NIE WIDZI", p.Name, slowo)
+			}
+		}
+	}
+
+	odp = s.odpowiedz(rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("4"), Method: "prompts/get",
+		Params: json.RawMessage(`{"name":"nie-ma-takiego"}`)})
+	if odp.Error == nil {
+		t.Error("nieznany prompt ma dawac blad, nie pustke")
+	}
+}

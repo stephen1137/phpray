@@ -187,7 +187,7 @@ table{width:100%;border-collapse:collapse;font-size:11px}th{text-align:left;padd
 
 <!-- TAB: Diagnostics -->
 <div class="tc" id="t-diagnostics">
-  <div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button onclick="exportReport()" style="background:var(--accent);color:#fff;border:none;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer">Export Report</button></div>
+  <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:8px"><span id="exp-msg" style="font-size:11px;color:var(--muted,#8792a1)"></span><button onclick="exportReport()" style="background:var(--accent);color:#fff;border:none;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer">Export Report</button></div>
   <div id="diag-content"><p style="color:var(--dim)">Loading diagnostics...</p></div>
 </div>
 
@@ -268,11 +268,29 @@ h+='</tbody></table>';}
 p.innerHTML=h;p.style.display='block';p.scrollIntoView({behavior:'smooth',block:'start'});}
 E('fu-sort').addEventListener('change',loadUsers);
 
-async function exportReport(){const f=F();const d=f.d||'';if(!d){alert('Please enter a domain in the filter first.');return;}
+// Raport wychodzi w HTML-u, nie w markdownie.
+//
+// To jedyna rzecz w produkcie, ktora WEDRUJE DALEJ — do wlasciciela sklepu,
+// do programisty, do zgloszenia. Jeden samowystarczalny plik ze stopka
+// "safe to forward" i odnosnikami utm_source=report. Mial go CLI, wtyczka
+// DirectAdmin i konsola Cloud; ten panel, czyli pierwsza powierzchnia kazdego,
+// kto zainstalowal PHPRaya sam, oddawal .md bez ani jednego odnosnika do nas.
+//
+// Bez alert(): okno modalne blokuje strone i wyglada jak awaria. Komunikat
+// idzie obok przycisku i znika sam.
+function exp_msg(txt,zle){const e=E('exp-msg');if(!e)return;e.textContent=txt||'';
+e.style.color=zle?'var(--bad,#c0332b)':'var(--muted,#8792a1)';
+if(txt)setTimeout(function(){if(e.textContent===txt)e.textContent='';},6000);}
+async function exportReport(){const f=F();const d=f.d||'';
+if(!d){exp_msg('Pick a domain in the filter first — a report is about one site.',1);return;}
 const tk=getToken();const h={};if(tk)h['Authorization']='Bearer '+tk;
-try{const r=await fetch(A+'/diagnostics/'+encodeURIComponent(d)+'/report?format=markdown&window='+f.w,{headers:h});
-if(!r.ok){alert('Failed to generate report');return;}const blob=await r.blob();const url=URL.createObjectURL(blob);
-const a=document.createElement('a');a.href=url;a.download='phpray-report-'+d+'.md';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);}catch(e){alert('Error: '+e.message);}}
+exp_msg('Building the report…');
+try{const r=await fetch(A+'/diagnostics/'+encodeURIComponent(d)+'/report?format=html&window='+f.w,{headers:h});
+if(!r.ok){exp_msg('Could not build the report ('+r.status+').',1);return;}
+const blob=await r.blob();const url=URL.createObjectURL(blob);
+const a=document.createElement('a');a.href=url;a.download='phpray-report-'+d+'.html';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+exp_msg('Saved as phpray-report-'+d+'.html — one file, safe to send to anyone.');}
+catch(e){exp_msg('Could not build the report: '+(e&&e.message?e.message:e),1);}}
 
 function bn(r){const t=r.duration_ms||.01,db=r.db_ms||0,http=r.http_ms||0,redis=r.redis_ms||0,php=Math.max(0,t-db-http-(r.file_ms||0)-redis);
 const p=[{n:'PHP',v:php},{n:'DB',v:db,q:r.db_count},{n:'HTTP',v:http},{n:'Redis',v:redis}];p.sort((a,b)=>b.v-a.v);const top=p[0];
