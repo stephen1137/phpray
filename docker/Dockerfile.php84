@@ -1,0 +1,51 @@
+# PHPRay PHP 8.4 Compatibility Test
+#
+# Usage:
+#   docker build -f docker/Dockerfile.php84 -t phpray-php84 .
+#   docker run --rm phpray-php84
+
+FROM php:8.4-rc-cli
+
+# Build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    autoconf \
+    libcurl4-openssl-dev \
+    libsqlite3-dev \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install PHP extensions
+RUN docker-php-ext-install mysqli pdo pdo_mysql pdo_sqlite curl
+
+# Copy extension source
+COPY src/extension/ /usr/src/phpray/
+
+# Build the extension
+WORKDIR /usr/src/phpray
+RUN phpize \
+    && ./configure --enable-phpray \
+    && make -j$(nproc) \
+    && make install \
+    && echo "extension=phpray.so" > /usr/local/etc/php/conf.d/99-phpray.ini
+
+# PHPRay config
+RUN printf '\n\
+phpray.enabled = 1\n\
+phpray.mode = all\n\
+phpray.trace_cli = 1\n\
+phpray.emit_header = 0\n\
+phpray.capture_errors = 1\n\
+phpray.output_path = /tmp/phpray.jsonl\n\
+phpray.output_mode = both\n\
+phpray.shm_path = /dev/shm/phpray\n\
+phpray.shm_size = 1048576\n\
+' >> /usr/local/etc/php/conf.d/99-phpray.ini
+
+# Copy test scripts
+COPY docker/test/ /var/www/html/
+COPY docker/valgrind/valgrind_test.php /var/www/html/valgrind_test.php
+
+WORKDIR /var/www/html
+
+CMD ["sh", "-c", "echo '=== PHPRay PHP 8.4 Compatibility Test ===' && php -v && echo '' && php -m | grep phpray && echo '' && php /var/www/html/valgrind_test.php 30 && echo '' && echo '✅ PHP 8.4: All tests passed' && cat /tmp/phpray.jsonl | head -3"]

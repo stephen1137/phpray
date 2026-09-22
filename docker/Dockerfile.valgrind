@@ -1,0 +1,58 @@
+# PHPRay Valgrind Memory Leak Check
+# Uses PHP CLI with Valgrind to detect memory leaks in the extension.
+#
+# Usage:
+#   docker build -f docker/Dockerfile.valgrind -t phpray-valgrind .
+#   docker run --rm phpray-valgrind
+
+FROM php:8.3-cli
+
+# Build dependencies + Valgrind
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    autoconf \
+    valgrind \
+    libcurl4-openssl-dev \
+    libsqlite3-dev \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install PHP extensions needed for hook testing
+RUN docker-php-ext-install mysqli pdo pdo_mysql pdo_sqlite curl
+
+# Copy extension source
+COPY src/extension/ /usr/src/phpray/
+
+# Build the extension (with debug symbols for Valgrind)
+WORKDIR /usr/src/phpray
+RUN phpize \
+    && ./configure --enable-phpray CFLAGS="-g -O0" \
+    && make -j$(nproc) \
+    && make install \
+    && echo "extension=phpray.so" > /usr/local/etc/php/conf.d/99-phpray.ini
+
+# PHPRay config — trace_cli=1 for CLI testing, output_mode=both to exercise ring buffer
+RUN printf '\n\
+phpray.enabled = 1\n\
+phpray.mode = all\n\
+phpray.trace_cli = 1\n\
+phpray.emit_header = 0\n\
+phpray.capture_errors = 1\n\
+phpray.output_path = /tmp/phpray.jsonl\n\
+phpray.output_mode = both\n\
+phpray.shm_path = /dev/shm/phpray\n\
+phpray.shm_size = 1048576\n\
+' >> /usr/local/etc/php/conf.d/99-phpray.ini
+
+# Valgrind suppression file for known PHP internals false positives
+COPY docker/valgrind/php.supp /usr/src/phpray/php.supp
+
+# Copy test scripts
+COPY docker/test/ /var/www/html/
+COPY docker/valgrind/valgrind_test.php /var/www/html/valgrind_test.php
+COPY docker/valgrind/run_valgrind.sh /usr/local/bin/run_valgrind.sh
+RUN chmod +x /usr/local/bin/run_valgrind.sh
+
+WORKDIR /var/www/html
+
+CMD ["/usr/local/bin/run_valgrind.sh"]

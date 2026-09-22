@@ -1,0 +1,110 @@
+# Valgrind suppression file for PHP internals
+# These are known false positives from the PHP engine itself,
+# not from PHPRay.
+
+# PHP's own memory manager uses pooled allocation
+{
+   php_mm_alloc
+   Memcheck:Leak
+   ...
+   fun:__zend_malloc
+   ...
+}
+
+# PHP startup allocations (intentionally not freed until process exit)
+{
+   php_module_startup
+   Memcheck:Leak
+   ...
+   fun:php_module_startup
+   ...
+}
+
+# PHP GC internals
+{
+   php_gc_init
+   Memcheck:Leak
+   ...
+   fun:gc_init
+   ...
+}
+
+# PHP's string interning table
+{
+   php_interned_strings
+   Memcheck:Leak
+   ...
+   fun:zend_interned_strings_init
+   ...
+}
+
+# Zend engine compile-time allocations
+{
+   zend_compile
+   Memcheck:Leak
+   ...
+   fun:zend_compile_file
+   ...
+}
+
+# PHP INI entries are freed at module shutdown
+{
+   php_ini_entries
+   Memcheck:Leak
+   ...
+   fun:zend_register_ini_entries
+   ...
+}
+
+# PHP extension loading
+{
+   php_dl_ext
+   Memcheck:Leak
+   ...
+   fun:php_load_extension
+   ...
+}
+
+# libcurl global init (singleton, freed at process exit)
+{
+   curl_global_init
+   Memcheck:Leak
+   ...
+   fun:curl_global_init
+   ...
+}
+
+# OpenSSL allocations (singletons)
+{
+   openssl_init
+   Memcheck:Leak
+   ...
+   fun:OPENSSL_init_ssl
+   ...
+}
+
+{
+   openssl_init2
+   Memcheck:Leak
+   ...
+   fun:CRYPTO_malloc
+   ...
+}
+
+# GLib hash table (used by many libs)
+{
+   glib_hash
+   Memcheck:Leak
+   ...
+   fun:g_hash_table_new*
+   ...
+}
+
+# dlopen (dynamic loading - persistent by design)
+{
+   dlopen
+   Memcheck:Leak
+   ...
+   fun:_dl_*
+   ...
+}

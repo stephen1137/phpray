@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🔦 PHPRay</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%23ffbe46'/%3E%3Cpath d='M7 22V10h10l-4 6h12l-8 7' fill='none' stroke='%2310141c' stroke-width='3'/%3E%3C/svg%3E">
+<style>
+:root{--bg:#0f1117;--card:#1a1d27;--border:#2a2d3a;--text:#e1e4eb;--dim:#8b8fa3;--accent:#6c5ce7;--green:#00d2d3;--red:#ff6b6b;--yellow:#feca57;--blue:#54a0ff;--orange:#ff9f43}
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:13px}
+.hdr{background:var(--card);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;justify-content:space-between}.hdr h1{font-size:15px}.hdr h1 span{opacity:.5;font-weight:400}.hdr .m{font-size:11px;color:var(--dim)}
+.ct{max-width:1440px;margin:0 auto;padding:12px}
+
+/* Tabs */
+.tabs{display:flex;gap:2px;margin-bottom:12px;border-bottom:2px solid var(--border);padding-bottom:0}
+.tab{padding:8px 16px;font-size:12px;font-weight:600;color:var(--dim);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s}
+.tab:hover{color:var(--text)}.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tc{display:none}.tc.active{display:block}
+
+/* Cards */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px}
+.st{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px}.st .l{font-size:9px;text-transform:uppercase;color:var(--dim);letter-spacing:.5px}.st .v{font-size:22px;font-weight:700;margin:1px 0}.st .s{font-size:10px;color:var(--dim)}
+.st.r .v{color:var(--red)}.st.y .v{color:var(--yellow)}.st.g .v{color:var(--green)}
+
+/* Filters */
+.fl{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
+.fl input,.fl select{background:var(--card);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:5px;font-size:11px}
+.fl label{font-size:11px;display:flex;align-items:center;gap:3px}
+
+/* Panels */
+.pn{background:var(--card);border:1px solid var(--border);border-radius:6px;margin-bottom:10px;overflow:hidden}
+.ph{padding:8px 12px;border-bottom:1px solid var(--border);font-weight:600;font-size:12px;display:flex;justify-content:space-between}.ph .b{background:var(--accent);color:#fff;font-size:9px;padding:1px 6px;border-radius:8px}
+
+/* Tables */
+table{width:100%;border-collapse:collapse;font-size:11px}th{text-align:left;padding:5px 8px;color:var(--dim);font-size:9px;text-transform:uppercase;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card)}td{padding:4px 8px;border-bottom:1px solid rgba(42,45,58,.4)}tr:hover td{background:rgba(108,92,231,.04)}tr.ck{cursor:pointer}
+.mn{font-family:'SF Mono','Fira Code',monospace;font-size:10px}
+.lv{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:600}.l-summary{background:#2a2d3a;color:var(--dim)}.l-normal{background:rgba(84,160,255,.12);color:var(--blue)}.l-full{background:rgba(254,202,87,.12);color:var(--yellow)}.l-alert{background:rgba(255,107,107,.12);color:var(--red)}
+.dr{font-weight:600;font-family:'SF Mono',monospace;font-size:10px}.df{color:var(--green)}.dm{color:var(--yellow)}.ds{color:var(--red)}
+.fg{font-size:9px;padding:1px 4px;border-radius:2px;margin-left:2px}.fn1{background:rgba(255,107,107,.15);color:var(--red)}.fwp{background:rgba(84,160,255,.1);color:var(--blue)}.fer{background:rgba(255,107,107,.1);color:var(--red)}
+
+/* Breakdown bars */
+.bk{display:flex;height:12px;border-radius:2px;overflow:hidden;min-width:80px}.bk .sg{height:100%;min-width:1px}.sp{background:var(--accent)}.sd{background:var(--blue)}.sh{background:var(--orange)}.sf{background:var(--dim)}.sr{background:var(--green)}
+
+/* Detail panel */
+.dt{background:var(--card);border:2px solid var(--accent);border-radius:8px;padding:14px;margin-bottom:10px;display:none}.dt.ac{display:block}
+.cls{float:right;background:none;border:1px solid var(--border);color:var(--dim);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:10px}.cls:hover{color:var(--text)}
+.sc{margin:10px 0 4px;font-size:11px;font-weight:600;color:var(--dim)}
+
+/* Layout */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:900px){.two{grid-template-columns:1fr}}
+.pill{display:inline-block;padding:2px 6px;border-radius:8px;font-size:9px;font-weight:600}.pill-s{background:rgba(255,107,107,.12);color:var(--red)}.pill-w{background:rgba(254,202,87,.12);color:var(--yellow)}.pill-o{background:rgba(0,210,211,.1);color:var(--green)}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;animation:p 2s infinite}@keyframes p{0%,100%{opacity:1}50%{opacity:.3}}
+.mark-row{display:flex;align-items:center;gap:6px;font-size:10px;margin:1px 0}.mark-bar{height:8px;background:var(--border);border-radius:3px;position:relative;flex:1;max-width:200px}.mark-dot{position:absolute;width:3px;height:8px;background:var(--accent);border-radius:1px}
+
+/* Diagnostics */
+.health{width:70px;height:70px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;border:3px solid var(--border)}
+.hg{border-color:var(--green);color:var(--green)}.hw{border-color:var(--yellow);color:var(--yellow)}.hb{border-color:var(--red);color:var(--red)}
+.finding{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;margin:8px 0;border-left:3px solid var(--dim)}
+.finding.fc{border-left-color:var(--red)}.finding.fw{border-left-color:var(--yellow)}.finding.fi{border-left-color:var(--blue)}
+.finding h4{font-size:13px;margin-bottom:4px}.finding p{font-size:11px;color:var(--dim);line-height:1.5}
+.finding .ev{font-family:'SF Mono',monospace;font-size:10px;background:var(--card);padding:4px 8px;border-radius:4px;margin:4px 0}
+.finding .fix{font-size:11px;color:var(--green);margin-top:4px}
+
+/* Auth login overlay */
+.login-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,17,23,.95);display:flex;align-items:center;justify-content:center;z-index:1000}
+.login-box{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:28px;width:360px;text-align:center}
+.login-box h2{font-size:16px;margin-bottom:4px}.login-box p{font-size:11px;color:var(--dim);margin-bottom:16px}
+.login-box input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:5px;font-size:12px;font-family:'SF Mono','Fira Code',monospace;margin-bottom:10px}
+.login-box button{width:100%;background:var(--accent);color:#fff;border:none;padding:8px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer}
+.login-box button:hover{opacity:.9}
+.login-box .err{color:var(--red);font-size:10px;margin-top:6px;display:none}
+.logout-btn{background:none;border:1px solid var(--border);color:var(--dim);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:10px;margin-left:8px}.logout-btn:hover{color:var(--text);border-color:var(--text)}
+.alert-row td{border-left:3px solid transparent}.alert-row.ac td{border-left-color:var(--red)}.alert-row.aw td{border-left-color:var(--yellow)}.alert-row.ai td{border-left-color:var(--blue)}
+.ack-btn{background:var(--card);border:1px solid var(--border);color:var(--dim);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:10px}.ack-btn:hover{color:var(--text);border-color:var(--green)}
+.acked{color:var(--dim);font-style:italic}
+.cloud-cta{margin-left:10px;padding:4px 11px;border-radius:999px;font-size:12px;font-weight:600;text-decoration:none;background:#6366f1;color:#fff;white-space:nowrap}.cloud-cta:hover{background:#4f46e5}.cloud-cta.on{background:transparent;color:inherit;opacity:.75;border:1px solid var(--border)}
+</style>
+</head>
+<body>
+<div id="login-overlay" class="login-overlay" style="display:none">
+<div class="login-box">
+<h2>PHPRay</h2>
+<p>Enter your JWT token to connect</p>
+<!-- Pole hasła musi stać w formularzu: poza nim przegladarki zglaszaja uwage
+     w konsoli i menedzery hasel zachowuja sie nieprzewidywalnie. Enter tez
+     wtedy dziala bez dodatkowego kodu. -->
+<form onsubmit="doLogin();return false">
+<!-- Ukryte pole uzytkownika: bez niego przegladarka zglasza uwage, a menedzery
+     hasel nie wiedza, pod czym zapisac token. Wartosc stala, bo logowanie do
+     panelu lokalnego to sam token. -->
+<input type="text" name="username" value="phpray" autocomplete="username" hidden readonly>
+<input type="password" id="token-input" autocomplete="current-password" placeholder="Paste JWT token here...">
+<button type="submit">Connect</button>
+</form>
+<div class="err" id="login-err"></div>
+</div>
+</div>
+<div class="hdr"><h1>🔦 PHPRay <span>Dashboard</span></h1><div class="m"><span class="dot"></span> <span id="status">Loading...</span><a id="cloud-cta" class="cloud-cta" style="display:none" target="_blank" rel="noopener"></a><button class="logout-btn" id="logout-btn" style="display:none" onclick="doLogout()">Logout</button></div></div>
+<div class="ct">
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('overview')">📊 Overview</div>
+  <div class="tab" onclick="switchTab('requests')">📋 Requests</div>
+  <div class="tab" onclick="switchTab('domains')">🌐 Domains</div>
+  <div class="tab" onclick="switchTab('queries')">💾 Slow Queries</div>
+  <div class="tab" onclick="switchTab('users')">👤 Users</div>
+  <div class="tab" onclick="switchTab('components')">📦 Components</div>
+  <div class="tab" onclick="switchTab('diagnostics')">🩺 Diagnostics</div>
+  <div class="tab" onclick="switchTab('alerts')">🔔 Alerts <span id="alert-badge" class="b" style="display:none;background:var(--red)">0</span></div>
+</div>
+
+<!-- Filters (global) -->
+<div class="fl">
+<input type="text" id="fd" placeholder="Domain..." style="width:160px">
+<select id="fw"><option value="5">5m</option><option value="15">15m</option><option value="60" selected>1h</option><option value="1440">24h</option><option value="10080">7d</option></select>
+<select id="fl"><option value="">All levels</option><option value="summary">Summary</option><option value="normal">Normal</option><option value="full">Full</option><option value="alert">Alert</option></select>
+<select id="fa"><option value="">All apps</option><option value="wordpress">WordPress</option><option value="prestashop">PrestaShop</option><option value="laravel">Laravel</option><option value="magento">Magento</option><option value="symfony">Symfony</option><option value="unknown">Unknown</option></select>
+<input type="number" id="fm" placeholder="Min ms" style="width:70px" min="0">
+<label><input type="checkbox" id="fn"> N+1 only</label>
+<select id="fs" style="margin-left:auto"><option value="time">Sort: Time ↓</option><option value="duration">Slowest ↓</option><option value="queries">Most queries ↓</option></select>
+</div>
+
+<!-- TAB: Overview -->
+<div class="tc active" id="t-overview">
+  <div class="stats" id="stats"></div>
+  <div class="two">
+    <div class="pn"><div class="ph">Top Domains</div><table><thead><tr><th>Domain</th><th>Reqs</th><th>Avg</th><th>Max</th><th>Errors</th><th>N+1</th></tr></thead><tbody id="dom-ov"></tbody></table></div>
+    <div class="pn"><div class="ph">Slowest Queries</div><table><thead><tr><th>Query</th><th>Avg</th><th>Max</th><th>Count</th></tr></thead><tbody id="sq-ov"></tbody></table></div>
+  </div>
+  <div class="two" style="margin-top:10px">
+    <div class="pn"><div class="ph">📦 Top Components (by total time)</div><table><thead><tr><th>Component</th><th>Category</th><th>Avg Time</th><th>Avg % of Request</th><th>Requests</th></tr></thead><tbody id="comp-ov"></tbody></table></div>
+    <div class="pn"><div class="ph">🐘 PHP Versions</div><div id="php-ver-ov" style="padding:10px"><span style="color:var(--dim);font-size:11px">Loading...</span></div></div>
+  </div>
+</div>
+
+<!-- TAB: Requests -->
+<div class="tc" id="t-requests">
+  <div class="dt" id="detail"></div>
+  <div class="pn"><div class="ph">Requests <span class="b" id="rc">0</span></div>
+  <div style="max-height:600px;overflow-y:auto"><table><thead><tr><th>Time</th><th>User</th><th>Host</th><th>App</th><th>URI</th><th>Status</th><th>Duration</th><th style="width:100px">Breakdown</th><th>Level</th><th>Queries</th><th>Bottleneck</th><th>Flags</th></tr></thead><tbody id="rb"></tbody></table></div></div>
+</div>
+
+<!-- TAB: Domains -->
+<div class="tc" id="t-domains">
+  <div class="pn"><div class="ph">All Domains</div>
+  <table><thead><tr><th>Domain</th><th>App</th><th>Owner</th><th>Requests</th><th>Avg Latency</th><th>Max Latency</th><th>Errors</th><th>N+1 Count</th><th>Total Queries</th></tr></thead><tbody id="dom-full"></tbody></table></div>
+</div>
+
+<!-- TAB: Slow Queries -->
+<div class="tc" id="t-queries">
+  <div style="display:flex;gap:2px;margin-bottom:10px">
+    <div class="tab active" id="sqt-slow" onclick="switchQuerySub('slow')" style="font-size:11px;padding:5px 12px">Slowest (by avg ms)</div>
+    <div class="tab" id="sqt-freq" onclick="switchQuerySub('freq')" style="font-size:11px;padding:5px 12px">Most Frequent (by count)</div>
+  </div>
+  <div id="sq-slow-panel" class="pn"><div class="ph">Slow Query Fingerprints (deduplicated)</div>
+  <table><thead><tr><th>#</th><th>Query Fingerprint</th><th>Host</th><th>Avg</th><th>Max</th><th>Total</th><th>Count</th></tr></thead><tbody id="sq-full"></tbody></table></div>
+  <div id="sq-freq-panel" class="pn" style="display:none"><div class="ph">Frequent Query Fingerprints (by execution count)</div>
+  <table><thead><tr><th>#</th><th>Fingerprint</th><th>Exec Count</th><th>Avg ms</th><th>Max ms</th><th>Total ms</th><th>Host</th></tr></thead><tbody id="fq-full"></tbody></table></div>
+</div>
+
+<!-- TAB: Users -->
+<div class="tc" id="t-users">
+  <div class="fl" style="margin-bottom:8px">
+    <select id="fu-sort"><option value="avg_ms">Sort: Avg Latency ↓</option><option value="requests">Most Requests ↓</option><option value="max_ms">Max Latency ↓</option><option value="errors">Most Errors ↓</option><option value="queries">Most Queries ↓</option></select>
+  </div>
+  <div class="dt" id="user-detail" style="display:none"></div>
+  <div class="pn"><div class="ph">Hosting Users <span class="b" id="uc">0</span></div>
+  <div style="max-height:600px;overflow-y:auto"><table><thead><tr><th>User</th><th>UID</th><th>Domains</th><th>Requests</th><th>Avg Latency</th><th>Max Latency</th><th>Errors</th><th>N+1</th><th>Total Queries</th></tr></thead><tbody id="users-tb"></tbody></table></div></div>
+</div>
+
+<!-- TAB: Components -->
+<div class="tc" id="t-components">
+  <div class="fl" style="margin-bottom:8px">
+    <select id="comp-sort"><option value="total_ms">Sort: Total Time ↓</option><option value="avg_ms">Avg Time ↓</option><option value="max_ms">Max Time ↓</option><option value="calls">Most Calls ↓</option><option value="traces">Most Requests ↓</option><option value="pct">Avg % of Request ↓</option></select>
+    <select id="comp-cat"><option value="">All categories</option><option value="plugin">🔌 Plugins</option><option value="theme">🎨 Themes</option><option value="vendor">📦 Vendor</option><option value="wp-core">⚙️ WP Core</option><option value="core">🧩 Core</option></select>
+  </div>
+  <div class="two">
+    <div class="pn"><div class="ph">Component Breakdown <span class="b" id="comp-count">0</span></div>
+    <div style="max-height:600px;overflow-y:auto"><table><thead><tr><th>Component</th><th>Category</th><th>Total Time</th><th>Avg Time</th><th>Max Time</th><th>Avg % of Req</th><th>Calls</th><th>Requests</th></tr></thead><tbody id="comp-tb"></tbody></table></div></div>
+    <div>
+      <div class="pn"><div class="ph">📊 Time Distribution</div><div id="comp-chart" style="padding:12px;min-height:200px"></div></div>
+      <div class="pn" style="margin-top:10px"><div class="ph">🔌 Top Plugins by Impact</div><div style="max-height:300px;overflow-y:auto"><table><thead><tr><th>Plugin</th><th>Avg Time</th><th>Avg %</th><th>Impact</th></tr></thead><tbody id="comp-plugins"></tbody></table></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- TAB: Diagnostics -->
+<div class="tc" id="t-diagnostics">
+  <div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button onclick="exportReport()" style="background:var(--accent);color:#fff;border:none;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer">Export Report</button></div>
+  <div id="diag-content"><p style="color:var(--dim)">Loading diagnostics...</p></div>
+</div>
+
+<!-- TAB: Alerts -->
+<div class="tc" id="t-alerts">
+  <div class="fl" style="margin-bottom:8px">
+    <select id="alert-sev"><option value="">All severities</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="info">Info</option></select>
+    <label><input type="checkbox" id="alert-ack" onchange="loadAlerts()"> Show acknowledged</label>
+  </div>
+  <div class="pn"><div class="ph">Alert History <span class="b" id="alert-count">0</span></div>
+  <div style="max-height:600px;overflow-y:auto"><table><thead><tr><th>Time</th><th>Severity</th><th>Domain</th><th>Metric</th><th>Value</th><th>Threshold</th><th>Message</th><th>Action</th></tr></thead><tbody id="alerts-tb"></tbody></table></div></div>
+</div>
+
+</div>
+
+<script>
+const A='/api/v1',E=c=>document.getElementById(c);
+let authRequired=false;
+const getToken=()=>localStorage.getItem('phpray_token')||'';
+const ms=v=>v==null?'-':v<1?v.toFixed(2)+'ms':v<1000?Math.round(v)+'ms':(v/1000).toFixed(1)+'s';
+const ts=t=>new Date(t*1000).toLocaleTimeString();
+const ct=(s,n)=>s&&s.length>n?s.slice(0,n-1)+'…':s||'';
+const dc=v=>v<200?'df':v<1000?'dm':'ds';
+const F=()=>({d:E('fd').value,l:E('fl').value,a:E('fa').value,w:E('fw').value,m:E('fm').value,n:E('fn').checked?'1':'',s:E('fs').value});
+const J=async u=>{try{const h={};const tk=getToken();if(tk)h['Authorization']='Bearer '+tk;const r=await fetch(A+u,{headers:h});if(r.status===401){showLogin();return null;}if(!r.ok)return null;return await r.json()}catch(e){return null}};
+function showLogin(){E('login-overlay').style.display='flex';E('token-input').focus();}
+function hideLogin(){E('login-overlay').style.display='none';E('login-err').style.display='none';}
+async function doLogin(){const tk=E('token-input').value.trim();if(!tk){E('login-err').textContent='Token is required';E('login-err').style.display='block';return;}
+try{const r=await fetch(A+'/overview?window=5',{headers:{'Authorization':'Bearer '+tk}});if(r.status===401){E('login-err').textContent='Invalid or expired token';E('login-err').style.display='block';return;}
+localStorage.setItem('phpray_token',tk);hideLogin();E('logout-btn').style.display='inline-block';go();}catch(e){E('login-err').textContent='Connection error';E('login-err').style.display='block';}}
+function doLogout(){localStorage.removeItem('phpray_token');if(authRequired)showLogin();E('logout-btn').style.display='none';}
+E('token-input').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+async function checkAuth(){try{const r=await fetch(A+'/auth/status');const d=await r.json();authRequired=d.auth_enabled;if(authRequired){E('logout-btn').style.display=getToken()?'inline-block':'none';if(!getToken()){showLogin();return false;}}return true;}catch(e){return true;}}
+
+function switchTab(name){
+  document.querySelectorAll('.tabs>.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tc').forEach(t=>t.classList.remove('active'));
+  document.querySelector(`.tabs>.tab[onclick*="${name}"]`).classList.add('active');
+  E('t-'+name).classList.add('active');
+  if(name==='diagnostics')loadDiag();
+  if(name==='queries')loadFreqQueries();
+  if(name==='users')loadUsers();
+  if(name==='components')loadComponents();
+  if(name==='alerts')loadAlerts();
+}
+function switchQuerySub(sub){
+  E('sqt-slow').classList.toggle('active',sub==='slow');
+  E('sqt-freq').classList.toggle('active',sub==='freq');
+  E('sq-slow-panel').style.display=sub==='slow'?'block':'none';
+  E('sq-freq-panel').style.display=sub==='freq'?'block':'none';
+  if(sub==='freq')loadFreqQueries();
+}
+async function loadFreqQueries(){const f=F();let u='/queries/frequent?limit=30&window='+f.w;if(f.d)u+='&domain='+f.d;
+const q=await J(u);if(q&&q.queries){E('fq-full').innerHTML=(q.queries||[]).map((x,i)=>`<tr><td>${i+1}</td><td class="mn">${ct(x.fingerprint,45)}</td><td><strong>${x.exec_count}</strong></td><td class="dr ${dc(x.avg_ms)}">${ms(x.avg_ms)}</td><td class="dr ${dc(x.max_ms)}">${ms(x.max_ms)}</td><td>${ms(x.total_ms||0)}</td><td>${ct(x.host,20)}</td></tr>`).join('');}}
+async function loadUsers(){const f=F();const sort=E('fu-sort').value;
+const u=await J(`/users?window=${f.w}&limit=50&sort=${sort}`);
+if(u&&u.users){E('uc').textContent=u.users.length;
+E('users-tb').innerHTML=(u.users||[]).map(x=>{
+const name=x.username||(x.uid?'uid:'+x.uid:'?');
+return`<tr class="ck" onclick="userDetail(${x.uid})"><td><strong>${name}</strong></td><td class="mn">${x.uid}</td><td>${x.domain_count||0}</td><td>${x.requests}</td><td class="dr ${dc(x.avg_duration_ms)}">${ms(x.avg_duration_ms)}</td><td class="dr ${dc(x.max_duration_ms)}">${ms(x.max_duration_ms)}</td><td>${x.error_count||0}</td><td>${x.n1_count||0}</td><td>${x.total_queries||0}</td></tr>`;}).join('');}
+else{E('users-tb').innerHTML='<tr><td colspan="9" style="text-align:center;color:var(--dim);padding:20px">No user data available</td></tr>';}}
+async function userDetail(uid){const f=F();const u=await J(`/users/${uid}?window=${f.w}`);if(!u||!u.user)return;
+const x=u.user;const name=x.username||(x.uid?'uid:'+x.uid:'?');
+const p=E('user-detail');
+let h=`<button class="cls" onclick="E('user-detail').style.display='none'">✕</button>
+<h3>👤 ${name} <span style="color:var(--dim);font-weight:400;font-size:12px">(UID: ${x.uid})</span></h3>
+<div class="stats" style="margin:10px 0">
+<div class="st"><div class="l">Requests</div><div class="v">${x.requests}</div></div>
+<div class="st ${x.avg_duration_ms>1000?'y':'g'}"><div class="l">Avg Latency</div><div class="v">${ms(x.avg_duration_ms)}</div></div>
+<div class="st ${x.max_duration_ms>3000?'r':'y'}"><div class="l">Max Latency</div><div class="v">${ms(x.max_duration_ms)}</div></div>
+<div class="st ${x.error_count?'r':'g'}"><div class="l">Errors</div><div class="v">${x.error_count||0}</div></div>
+<div class="st"><div class="l">N+1</div><div class="v">${x.n1_count||0}</div></div>
+<div class="st"><div class="l">Domains</div><div class="v">${x.domain_count||0}</div></div>
+</div>`;
+if(u.domains&&u.domains.length){h+=`<div class="sc">🌐 Domains</div><table><thead><tr><th>Domain</th><th>Requests</th><th>Avg</th><th>Max</th><th>Errors</th></tr></thead><tbody>`;
+u.domains.forEach(d=>{h+=`<tr><td>${d.host}</td><td>${d.requests}</td><td class="dr ${dc(d.avg_ms)}">${ms(d.avg_ms)}</td><td class="dr ${dc(d.max_ms)}">${ms(d.max_ms)}</td><td>${d.errors||0}</td></tr>`;});
+h+='</tbody></table>';}
+p.innerHTML=h;p.style.display='block';p.scrollIntoView({behavior:'smooth',block:'start'});}
+E('fu-sort').addEventListener('change',loadUsers);
+
+async function exportReport(){const f=F();const d=f.d||'';if(!d){alert('Please enter a domain in the filter first.');return;}
+const tk=getToken();const h={};if(tk)h['Authorization']='Bearer '+tk;
+try{const r=await fetch(A+'/diagnostics/'+encodeURIComponent(d)+'/report?format=markdown&window='+f.w,{headers:h});
+if(!r.ok){alert('Failed to generate report');return;}const blob=await r.blob();const url=URL.createObjectURL(blob);
+const a=document.createElement('a');a.href=url;a.download='phpray-report-'+d+'.md';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);}catch(e){alert('Error: '+e.message);}}
+
+function bn(r){const t=r.duration_ms||.01,db=r.db_ms||0,http=r.http_ms||0,redis=r.redis_ms||0,php=Math.max(0,t-db-http-(r.file_ms||0)-redis);
+const p=[{n:'PHP',v:php},{n:'DB',v:db,q:r.db_count},{n:'HTTP',v:http},{n:'Redis',v:redis}];p.sort((a,b)=>b.v-a.v);const top=p[0];
+if(top.v<1)return{t:'-',c:'pill-o'};const pct=Math.round(top.v/t*100);let txt=`${top.n} ${pct}% (${ms(top.v)})`;
+if(top.n==='DB'&&r.db_count>20)txt+=` · ${r.db_count}q`;if(r.n1)txt+=' · N+1!';
+return{t:txt,c:pct>70?'pill-s':pct>40?'pill-w':'pill-o'};}
+
+// Product-led: pokaż stan chmury albo zaproszenie do PHPRay Cloud (fleet console).
+async function cloudCta(){try{const d=await J('/health');const el=E('cloud-cta');if(!el||!d)return;const c=d.cloud||{};
+if(c.enabled||c.connected){el.textContent=`☁ Cloud ${c.connected?'connected':'configured'} · ${c.sent_traces||0} traces sent`;el.href='https://app.phpray.dev/app/';el.className='cloud-cta on';el.title='PHPRay Cloud fleet console';}
+else{el.textContent='Connect to PHPRay Cloud →';el.href='https://phpray.dev/cloud?utm_source=dashboard';el.className='cloud-cta';el.title='All your servers in one console: alerts, before/after compare, profiling from the browser. Free tier available.';}
+el.style.display='inline-block';}catch(e){}}
+async function go(){const f=F();
+const o=await J(`/overview?window=${f.w}`);
+if(o){E('status').textContent=`${o.total_requests} traces · ${new Date().toLocaleTimeString()}`;cloudCta();
+E('stats').innerHTML=[
+{l:'Requests',v:o.total_requests},{l:'Avg',v:ms(o.avg_duration_ms),c:o.avg_duration_ms>1000?'y':'g'},
+{l:'P95',v:ms(o.p95_duration_ms||0),c:(o.p95_duration_ms||0)>2000?'r':''},{l:'Max',v:ms(o.max_duration_ms),c:o.max_duration_ms>3000?'r':'y'},
+{l:'Errors',v:o.error_count||0,s:(o.error_rate_pct||0).toFixed(1)+'%',c:o.error_count?'r':'g'},
+{l:'N+1',v:o.n1_count||0,s:(o.n1_rate_pct||0).toFixed(0)+'%',c:o.n1_count?'y':'g'},
+{l:'Queries',v:o.total_queries||0},{l:'Domains',v:o.unique_domains||0},
+].map(s=>`<div class="st ${s.c||''}"><div class="l">${s.l}</div><div class="v">${s.v}</div>${s.s?`<div class="s">${s.s}</div>`:''}</div>`).join('');}
+
+// Traces
+let u=`/traces?limit=100&window=${f.w}`;if(f.d)u+=`&domain=${f.d}`;if(f.l)u+=`&level=${f.l}`;if(f.a)u+=`&app=${f.a}`;if(f.n)u+=`&n1=1`;if(f.m)u+=`&min_ms=${f.m}`;
+const t=await J(u);if(t&&t.traces){let rows=t.traces||[];
+if(f.s==='duration')rows.sort((a,b)=>b.duration_ms-a.duration_ms);
+else if(f.s==='queries')rows.sort((a,b)=>(b.db_count||0)-(a.db_count||0));
+E('rc').textContent=rows.length;
+E('rb').innerHTML=rows.map(r=>{const tot=r.duration_ms||.01,dbP=Math.round((r.db_ms||0)/tot*100),httpP=Math.round((r.http_ms||0)/tot*100),fileP=Math.round((r.file_ms||0)/tot*100),redisP=Math.round((r.redis_ms||0)/tot*100),phpP=Math.max(0,100-dbP-httpP-fileP-redisP);
+const b=bn(r),flags=[];if(r.n1)flags.push('<span class="fg fn1">N+1</span>');if(r.wp)flags.push('<span class="fg fwp">WP</span>');if(r.error_count>0)flags.push(`<span class="fg fer">${r.error_count}err</span>`);
+return`<tr class="ck" onclick="switchTab('requests');detail(${r.id})"><td class="mn">${ts(r.timestamp)}</td><td>${ct(r.username||'',12)}</td><td>${ct(r.host,22)}</td><td style="font-size:10px">${r.app||'—'}</td><td class="mn">${ct(r.uri,30)}</td><td>${r.status}</td><td class="dr ${dc(r.duration_ms)}">${ms(r.duration_ms)}</td><td><div class="bk">${phpP?`<div class="sg sp" style="width:${phpP}%"></div>`:''}${dbP?`<div class="sg sd" style="width:${dbP}%"></div>`:''}${httpP?`<div class="sg sh" style="width:${httpP}%"></div>`:''}${fileP?`<div class="sg sf" style="width:${fileP}%"></div>`:''}${redisP?`<div class="sg sr" style="width:${redisP}%"></div>`:''}</div></td><td><span class="lv l-${r.level}">${r.level}</span></td><td>${r.db_count||'-'}</td><td><span class="pill ${b.c}">${b.t}</span></td><td>${flags.join('')}</td></tr>`;}).join('');}
+
+// Domains
+const d=await J(`/domains?window=${f.w}${f.a?'&app='+f.a:''}`);if(d&&d.domains){
+const dhtml=(d.domains||[]).map(x=>`<tr><td>${ct(x.host,28)}</td><td>${x.requests}</td><td class="dr ${dc(x.avg_duration_ms)}">${ms(x.avg_duration_ms)}</td><td class="dr ${dc(x.max_duration_ms)}">${ms(x.max_duration_ms)}</td><td>${x.errors||0}</td><td>${x.n1_count||0}</td></tr>`).join('');
+E('dom-ov').innerHTML=dhtml;
+E('dom-full').innerHTML=(d.domains||[]).map(x=>`<tr><td>${x.host}</td><td style="font-size:10px">${x.app||'—'}</td><td class="mn">${x.owner||'—'}</td><td>${x.requests}</td><td class="dr ${dc(x.avg_duration_ms)}">${ms(x.avg_duration_ms)}</td><td class="dr ${dc(x.max_duration_ms)}">${ms(x.max_duration_ms)}</td><td>${x.errors||0}</td><td>${x.n1_count||0}</td><td>${x.total_queries||0}</td></tr>`).join('');}
+
+// Top components for overview
+const comps=await J(`/components?window=${f.w}&limit=8&sort=total_ms`);
+// Pusta TABLICA to nie to samo co brak odpowiedzi: map().join('') zostawiał
+// samą główkę tabeli, więc karta flagowej funkcji wyglądała na zepsutą.
+// Zakładka Components mówi w tej sytuacji, dlaczego nie ma danych — tutaj
+// mówimy to samo.
+if(comps&&comps.components&&comps.components.length){
+const catI={plugin:'🔌',theme:'🎨',vendor:'📦','wp-core':'⚙️',core:'🧩',other:'📄'};
+E('comp-ov').innerHTML=(comps.components||[]).map(c=>{
+const pctBar=Math.min(100,Math.max(1,c.avg_pct));const barC=c.avg_pct>30?'var(--red)':c.avg_pct>10?'var(--yellow)':'var(--blue)';
+return`<tr><td><strong>${ct(c.name,35)}</strong></td><td>${catI[c.category]||'📄'} ${c.category}</td><td class="dr ${dc(c.avg_ms)}">${ms(c.avg_ms)}</td>
+<td><div style="display:flex;align-items:center;gap:4px"><div style="height:5px;width:50px;background:var(--border);border-radius:2px"><div style="height:5px;width:${pctBar}%;background:${barC};border-radius:2px"></div></div><span style="font-size:9px">${c.avg_pct.toFixed(1)}%</span></div></td>
+<td>${c.trace_count}</td></tr>`;}).join('');}
+else{E('comp-ov').innerHTML='<tr><td colspan="5" style="color:var(--dim);padding:12px;line-height:1.6">'
++'No component data in this window. Time is attributed per WordPress plugin and theme, and per vendor package, '
++'on <em>profiled</em> requests only — set <code>phpray.profile_functions=1</code> and '
++'<code>phpray.profile_mode=sample</code>, then reload PHP. Plain scripts outside those paths have nothing to attribute.'
++'</td></tr>';}
+
+// PHP Versions
+const phpv=await J(`/php-versions?window=${f.w}`);
+if(phpv&&phpv.versions&&phpv.versions.length){
+E('php-ver-ov').innerHTML=phpv.versions.map(v=>{
+const parts=v.version.split('.');const major=parseInt(parts[0])||0;const minor=parseInt(parts[1])||0;
+let badge='✅',color='var(--green)';
+if(major<8||(major===8&&minor<1)){badge='⛔ EOL';color='var(--red)';}
+else if(major===8&&minor===1){badge='⚠️ security-only';color='var(--yellow)';}
+return`<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)"><div><span style="font-size:14px;font-weight:700;color:${color}">PHP ${v.version}</span> <span style="font-size:9px;color:var(--dim)">${badge}</span></div><div style="font-size:11px;color:var(--dim)">${v.request_count} reqs</div></div>`;}).join('');}
+else{E('php-ver-ov').innerHTML='<span style="color:var(--dim);font-size:11px">No PHP version data yet</span>';}
+
+// Slow queries
+const q=await J('/queries/slow?limit=20');if(q&&q.queries){
+E('sq-ov').innerHTML=(q.queries||[]).slice(0,8).map(x=>`<tr><td class="mn">${ct(x.fingerprint,40)}</td><td class="dr ${dc(x.avg_ms)}">${ms(x.avg_ms)}</td><td class="dr ${dc(x.max_ms)}">${ms(x.max_ms)}</td><td>${x.exec_count}×</td></tr>`).join('');
+E('sq-full').innerHTML=(q.queries||[]).map((x,i)=>`<tr><td>${i+1}</td><td class="mn">${ct(x.fingerprint,50)}</td><td>${ct(x.host,20)}</td><td class="dr ${dc(x.avg_ms)}">${ms(x.avg_ms)}</td><td class="dr ${dc(x.max_ms)}">${ms(x.max_ms)}</td><td>${ms(x.total_ms||0)}</td><td>${x.exec_count}×</td></tr>`).join('');}}
+
+async function loadDiag(){const f=F();let u=`/diagnostics?window=${f.w}`;if(f.d)u+=`&domain=${f.d}`;
+const d=await J(u);if(!d){E('diag-content').innerHTML='<p style="color:var(--dim)">No diagnostics data. Import traces first.</p>';return;}
+const sc=d.health_score||0;const scC=sc>80?'hg':sc>50?'hw':'hb';
+let h=`<div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
+<div class="health ${scC}">${sc}</div>
+<div><div style="font-size:16px;font-weight:700">Health Score: ${sc}/100</div>
+<div style="font-size:12px;color:var(--dim)">${d.summary||`${(d.findings||[]).length} issues found`}</div></div></div>`;
+if(d.findings&&d.findings.length){d.findings.forEach(f=>{
+const sev=f.severity==='critical'?'fc':f.severity==='warning'?'fw':'fi';
+h+=`<div class="finding ${sev}"><h4>${f.title||f.rule||'Issue'}</h4><p>${f.description||''}</p>`;
+if(f.evidence&&f.evidence.length){h+='<div style="margin-top:6px">';f.evidence.forEach(e=>h+=`<div class="ev">${typeof e==='string'?e:JSON.stringify(e)}</div>`);h+='</div>';}
+if(f.fix){h+=`<div class="fix">💡 ${f.fix}</div>`;}
+h+='</div>';});}
+else{h+='<div style="padding:20px;text-align:center;color:var(--green);font-size:14px">✅ No issues found — looking good!</div>';}
+E('diag-content').innerHTML=h;}
+
+async function detail(id){const t=await J(`/traces/${id}`);if(!t)return;const p=E('detail');
+const total=t.duration_ms||.01,db=t.db_ms||0,http=t.http_ms||0,file=t.file_ms||0,redis=t.redis_ms||0,php=Math.max(0,total-db-http-file-redis);
+const dbP=(db/total*100).toFixed(1),httpP=(http/total*100).toFixed(1),fileP=(file/total*100).toFixed(1),redisP=(redis/total*100).toFixed(1),phpP=Math.max(0,100-dbP-httpP-fileP-redisP).toFixed(1);
+const cpuT=(t.cpu_user_ms||0)+(t.cpu_sys_ms||0),cpuPct=total>0?(cpuT/total*100).toFixed(0):'0';
+
+// Smart diagnosis
+let diag='';const dS='padding:10px 14px;margin:8px 0;border-radius:6px;font-size:12px;line-height:1.7;';
+if(phpP>80&&total>100){
+if(cpuPct>60){diag=`<div style="${dS}background:rgba(108,92,231,.1);border-left:3px solid var(--accent)"><strong>🔍 Diagnosis:</strong> PHP code took <strong>${ms(php)}</strong> with high CPU (${cpuPct}%).<br>Server was <strong>actively computing</strong> — framework bootstrap, template rendering, plugin init, autoloading (${t.file_count||0} file ops).<br>${(t.db_count||0)>20?`<em>${t.db_count} queries ran but took only ${ms(db)} — DB is NOT the problem.</em><br>`:''}${t.wp?'<strong>WP:</strong> Most WordPress time = loading plugins + theme. Disable unused plugins to speed up.':''}</div>`;}
+else{diag=`<div style="${dS}background:rgba(108,92,231,.1);border-left:3px solid var(--accent)"><strong>🔍 Diagnosis:</strong> PHP took <strong>${ms(php)}</strong> but CPU was low (${cpuPct}%).<br>Process was <strong>waiting/idle</strong> — file I/O, DNS, session locks, or untracked external call.</div>`;}}
+else if(dbP>50){diag=`<div style="${dS}background:rgba(84,160,255,.1);border-left:3px solid var(--blue)"><strong>🔍 Diagnosis:</strong> Database bottleneck — <strong>${ms(db)}</strong> (${dbP}%).<br>${(t.db_count||0)>20?`${t.db_count} queries — check for repeated patterns below.`:''}</div>`;}
+else if(httpP>50){diag=`<div style="${dS}background:rgba(255,159,67,.1);border-left:3px solid var(--orange)"><strong>🔍 Diagnosis:</strong> External HTTP calls took <strong>${ms(http)}</strong> (${httpP}%). Server waited for remote APIs.</div>`;}
+else if(redisP>30){diag=`<div style="${dS}background:rgba(0,210,211,.1);border-left:3px solid var(--green)"><strong>🔍 Diagnosis:</strong> Redis took <strong>${ms(redis)}</strong> (${redisP}%) across ${t.redis_count||0} calls. Check for slow commands or network latency to Redis.</div>`;}
+
+let n1b='';if(t.n1){n1b=`<div style="${dS}background:rgba(255,107,107,.08);border-left:3px solid var(--red)"><strong>⚠️ N+1 Query Problem</strong><br><strong>What:</strong> Same query in a loop: <code style="font-size:10px;background:var(--bg);padding:1px 4px;border-radius:3px">WHERE id=1</code> → <code style="font-size:10px;background:var(--bg);padding:1px 4px;border-radius:3px">id=2</code> → ... × ${t.db_count||0}<br><strong>Fix:</strong> One bulk query: <code style="font-size:10px;background:var(--bg);padding:1px 4px;border-radius:3px">WHERE id IN (1,2,3,...)</code><br><strong>Saves:</strong> ~${Math.round((t.db_count||0)*.5)}ms in query overhead.</div>`;}
+
+let h=`<button class="cls" onclick="E('detail').classList.remove('ac')">✕</button><h3>${t.method} ${t.host}${t.uri} — <span class="dr ${dc(t.duration_ms)}">${ms(t.duration_ms)}</span> <span class="lv l-${t.level}">${t.level}</span></h3>${diag}${n1b}
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:5px;margin:8px 0;font-size:11px;color:var(--dim)"><div>🆔 <span class="mn">${t.phpray_id}</span></div><div>👤 ${t.username||'uid:'+t.uid}</div><div>📊 ${t.status}</div><div>💾 ${(t.memory_peak_mb||0).toFixed(0)}MB</div><div>⚡ ${ms(t.cpu_user_ms||0)}u/${ms(t.cpu_sys_ms||0)}s</div>${t.php_version?`<div>🐘 PHP ${t.php_version}</div>`:''}${t.app?`<div>🧩 ${t.app}</div>`:''}</div>
+<div class="sc">⏱️ Breakdown</div><div class="bk" style="height:18px;border-radius:4px;margin:4px 0">${phpP>0?`<div class="sg sp" style="width:${phpP}%"></div>`:''}${dbP>0?`<div class="sg sd" style="width:${dbP}%"></div>`:''}${httpP>0?`<div class="sg sh" style="width:${httpP}%"></div>`:''}${fileP>0?`<div class="sg sf" style="width:${fileP}%"></div>`:''}${redisP>0?`<div class="sg sr" style="width:${redisP}%"></div>`:''}</div>
+<div style="display:flex;gap:10px;font-size:10px;color:var(--dim)"><span>🟣PHP ${phpP}% (${ms(php)})</span><span>🔵DB ${dbP}% (${t.db_count||0}q,${ms(db)})</span><span>🟠HTTP ${httpP}% (${t.http_count||0},${ms(http)})</span><span>⚪File ${fileP}% (${t.file_count||0},${ms(file)})</span>${(t.redis_count||0)>0?`<span>🟢Redis ${redisP}% (${t.redis_count}c,${ms(redis)})</span>`:''}</div>`;
+// Components breakdown (function-level profiling!)
+if(t.components&&t.components.length){
+const hasSelf=t.components.some(c=>c.self_ns!=null);
+h+='<div class="sc">📦 PHP Code Breakdown (what takes time)</div><table><thead><tr><th>Component</th><th>Inclusive</th>'+(hasSelf?'<th>Self</th>':'')+'<th>% of request</th><th>Calls</th></tr></thead><tbody>';
+// Inclusive = time while the component is on the stack (core code called from a plugin is charged to the plugin).
+// Self = the component's own frames minus nested observed components; self values add up without double counting.
+t.components.forEach(c=>{
+const selfPct=Math.min(c.pct,100);
+const barW=Math.min(100,Math.max(1,selfPct));
+const barC=selfPct>30?'var(--red)':selfPct>10?'var(--yellow)':'var(--blue)';
+const selfMs=c.self_ns!=null?c.self_ns/1e6:null;
+h+=`<tr><td><strong>${c.name}</strong></td><td class="dr ${dc(c.ms)}">${ms(c.ms)}</td>${hasSelf?`<td class="dr ${dc(selfMs||0)}">${selfMs!=null?ms(selfMs):'-'}</td>`:''}
+<td><div style="display:flex;align-items:center;gap:4px"><div style="height:6px;width:80px;background:var(--border);border-radius:3px"><div style="height:6px;width:${barW}%;background:${barC};border-radius:3px"></div></div><span style="font-size:9px">${selfPct.toFixed(1)}%</span></div></td>
+<td class="mn">${c.calls.toLocaleString()}</td></tr>`;});
+h+='</tbody></table><div style="font-size:9px;color:var(--dim);margin-top:2px">Inclusive time counts everything called from the component (nested components too), so inclusive percentages may add up above 100%. Self time excludes nested components and adds up without double counting.</div>';}
+
+if(t.marks&&t.marks.length){h+='<div class="sc">📍 Marks</div>';t.marks.forEach(m=>{const pct=Math.min(100,m.offset_ms/total*100);h+=`<div class="mark-row"><span class="mn" style="width:55px;text-align:right">${ms(m.offset_ms)}</span><div class="mark-bar"><div class="mark-dot" style="left:${pct}%"></div></div><span>${m.name}</span></div>`;});}
+if(t.queries&&t.queries.length){const sq=[...t.queries].sort((a,b)=>(b.duration_ms||0)-(a.duration_ms||0));const mx=sq[0].duration_ms||.01;
+h+=`<div class="sc">💾 Queries (${t.queries.length}) — slowest first</div><table><thead><tr><th>Duration</th><th>%</th><th>Src</th><th>SQL</th></tr></thead><tbody>`;
+sq.forEach(q=>{const pct=total>0?(q.duration_ms/total*100).toFixed(1):'0',bw=Math.max(2,Math.round((q.duration_ms||0)/mx*100)),bc=q.duration_ms>5?'var(--red)':q.duration_ms>1?'var(--yellow)':'var(--blue)';
+const btHtml=q.backtrace&&q.backtrace.length?'<div style="font-size:8px;color:var(--accent);margin-top:2px">'+q.backtrace.map(f=>`→ ${f.f}:${f.l}`).join('<br>')+'</div>':'';
+h+=`<tr><td class="dr ${dc(q.duration_ms||0)}">${ms(q.duration_ms||0)}</td><td><div style="display:flex;align-items:center;gap:3px"><div style="height:4px;width:50px;background:var(--border);border-radius:2px"><div style="height:4px;width:${bw}%;background:${bc};border-radius:2px"></div></div><span style="font-size:8px;color:var(--dim)">${pct}%</span></div></td><td>${q.source||'?'}</td><td class="mn" style="word-break:break-all;max-width:450px">${ct(q.sql,90)}${btHtml}</td></tr>`;});h+='</tbody></table>';}
+if(t.http_calls&&t.http_calls.length){h+=`<div class="sc">🌐 HTTP (${t.http_calls.length})</div><table><thead><tr><th>Duration</th><th>Status</th><th>URL</th></tr></thead><tbody>`;t.http_calls.forEach(c=>{const btHtml=c.backtrace&&c.backtrace.length?'<div style="font-size:8px;color:var(--accent);margin-top:2px">'+c.backtrace.map(f=>`→ ${f.f}:${f.l}`).join('<br>')+'</div>':'';h+=`<tr><td class="dr ${dc(c.duration_ms||0)}">${ms(c.duration_ms||0)}</td><td>${c.status}</td><td class="mn">${ct(c.url,70)}${btHtml}</td></tr>`;});h+='</tbody></table>';}
+if(t.errors&&t.errors.length){const bt={};t.errors.forEach(e=>bt[e.type]=(bt[e.type]||0)+1);const sm=Object.entries(bt).map(([k,v])=>`${k}:${v}`).join(' · ');
+h+=`<div class="sc" style="cursor:pointer" onclick="var x=document.getElementById('erd');x.style.display=x.style.display==='none'?'block':'none'">❌ Errors (${t.errors.length}) — <span style="font-weight:400;font-size:10px">${sm}</span> <span style="font-size:9px;color:var(--blue)">[click]</span></div><div id="erd" style="display:none;max-height:150px;overflow-y:auto">`;
+t.errors.forEach(e=>h+=`<div style="padding:2px 4px;font-size:9px;border-bottom:1px solid rgba(42,45,58,.3)"><strong>${e.type}</strong> @${ms(e.offset_ms||0)}: ${ct(e.message,90)}</div>`);h+='</div>';}
+p.innerHTML=h;p.classList.add('ac');p.scrollIntoView({behavior:'smooth',block:'start'});}
+
+async function loadComponents(){const f=F();const sort=E('comp-sort').value;const cat=E('comp-cat').value;
+let u=`/components?window=${f.w}&limit=50&sort=${sort}`;if(f.d)u+=`&domain=${f.d}`;if(cat)u+=`&category=${cat}`;
+const d=await J(u);if(!d||!d.components){E('comp-tb').innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--dim);padding:20px">No component data yet. The function profile is collected only for profiled requests (phpray.profile_mode = sample | url | all).</td></tr>';E('comp-count').textContent='0';return;}
+const comps=d.components||[];E('comp-count').textContent=comps.length+(d.profiled_traces!=null?' · '+d.profiled_traces+' profiled req':'');
+const catIcon={plugin:'🔌',theme:'🎨',vendor:'📦','wp-core':'⚙️',core:'🧩',other:'📄'};
+const catColor={plugin:'var(--red)',theme:'var(--yellow)',vendor:'var(--blue)','wp-core':'var(--accent)',core:'var(--green)',other:'var(--dim)'};
+// Table
+E('comp-tb').innerHTML=comps.map(c=>{
+const icon=catIcon[c.category]||'📄';const pctBar=Math.min(100,Math.max(1,c.avg_pct));const barC=c.avg_pct>30?'var(--red)':c.avg_pct>10?'var(--yellow)':'var(--blue)';
+return`<tr><td><strong>${c.name}</strong></td><td>${icon} ${c.category}</td><td class="dr ${dc(c.total_ms)}">${ms(c.total_ms)}</td><td class="dr ${dc(c.avg_ms)}">${ms(c.avg_ms)}</td><td class="dr ${dc(c.max_ms)}">${ms(c.max_ms)}</td>
+<td><div style="display:flex;align-items:center;gap:4px"><div style="height:6px;width:60px;background:var(--border);border-radius:3px"><div style="height:6px;width:${pctBar}%;background:${barC};border-radius:3px"></div></div><span style="font-size:9px">${c.avg_pct.toFixed(1)}%</span></div></td>
+<td class="mn">${c.total_calls.toLocaleString()}</td><td>${c.trace_count}</td></tr>`;}).join('');
+// Chart: horizontal bar chart of top 10 by total_ms
+const top10=comps.slice(0,10);const maxMs=top10.length?Math.max(...top10.map(c=>c.total_ms)):1;
+E('comp-chart').innerHTML=top10.length?top10.map(c=>{
+const w=Math.max(2,c.total_ms/maxMs*100);const clr=catColor[c.category]||'var(--dim)';
+return`<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><span style="font-size:10px;width:140px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</span><div style="flex:1;height:16px;background:var(--border);border-radius:3px;position:relative"><div style="height:16px;width:${w}%;background:${clr};border-radius:3px;display:flex;align-items:center;padding-left:4px;font-size:9px;color:#fff;font-weight:600">${ms(c.total_ms)}</div></div></div>`;}).join(''):'<div style="text-align:center;color:var(--dim);font-size:11px;padding:20px">No data</div>';
+// Top plugins panel
+const plugins=comps.filter(c=>c.category==='plugin').sort((a,b)=>b.avg_pct-a.avg_pct).slice(0,10);
+E('comp-plugins').innerHTML=plugins.length?plugins.map(c=>{
+const impact=c.avg_pct>20?'🔴 High':c.avg_pct>10?'🟡 Medium':c.avg_pct>3?'🟢 Low':'⚪ Minimal';
+return`<tr><td><strong>${c.name.replace('plugins/','')}</strong></td><td class="dr ${dc(c.avg_ms)}">${ms(c.avg_ms)}</td><td>${c.avg_pct.toFixed(1)}%</td><td style="font-size:10px">${impact}</td></tr>`;}).join(''):'<tr><td colspan="4" style="text-align:center;color:var(--dim);padding:12px">No plugin data</td></tr>';
+}
+E('comp-sort').addEventListener('change',loadComponents);
+E('comp-cat').addEventListener('change',loadComponents);
+
+async function loadAlerts(){
+const sev=E('alert-sev').value;const ack=E('alert-ack').checked?1:0;
+let u=`/alerts?limit=50&ack=${ack}`;if(sev)u+=`&severity=${sev}`;
+const d=await J(u);if(!d)return;
+const alerts=d.alerts||[];E('alert-count').textContent=alerts.length;
+E('alerts-tb').innerHTML=alerts.length?alerts.map(a=>{
+const sevC=a.severity==='critical'?'ac':a.severity==='warning'?'aw':'ai';
+const sevP=a.severity==='critical'?'pill-s':a.severity==='warning'?'pill-w':'pill-o';
+const ackBtn=a.acknowledged?'<span class="acked">Acked</span>':`<button class="ack-btn" onclick="ackAlert(${a.id})">Ack</button>`;
+return`<tr class="alert-row ${sevC}"><td class="mn">${ts(a.created_at)}</td><td><span class="pill ${sevP}">${a.severity}</span></td><td>${ct(a.domain||'global',22)}</td><td class="mn">${a.metric}</td><td class="dr ${dc(a.current_value)}">${a.metric.includes('rate')?a.current_value.toFixed(1)+'%':ms(a.current_value)}</td><td>${a.metric.includes('rate')?a.threshold_value.toFixed(0)+'%':ms(a.threshold_value)}</td><td style="font-size:10px;max-width:300px">${ct(a.message,80)}</td><td>${ackBtn}</td></tr>`;}).join(''):'<tr><td colspan="8" style="text-align:center;color:var(--dim);padding:20px">No alerts</td></tr>';
+}
+async function ackAlert(id){const r=await fetch(A+'/alerts/'+id+'/ack',{method:'POST',headers:getToken()?{'Authorization':'Bearer '+getToken()}:{}});if(r.ok){loadAlerts();pollAlertBadge();}}
+async function pollAlertBadge(){const d=await J('/alerts/count');if(d){const c=d.count||0;const b=E('alert-badge');b.textContent=c;b.style.display=c>0?'inline-block':'none';}}
+E('alert-sev').addEventListener('change',loadAlerts);
+
+['fd','fl','fa','fw','fm','fn','fs'].forEach(id=>{E(id).addEventListener('change',go);if(E(id).type==='text'||E(id).type==='number')E(id).addEventListener('input',debounce(go,300));});
+function debounce(fn,t){let d;return(...a)=>{clearTimeout(d);d=setTimeout(()=>fn(...a),t)}}
+checkAuth().then(ok=>{if(ok){go();pollAlertBadge();}});setInterval(go,5000);setInterval(pollAlertBadge,30000);
+</script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+[Unit]
+Description=PHPRay Collector (traces, local dashboard on 127.0.0.1:9191)
+# managed-by: phpray (unit revision 3) - the installer replaces units carrying this marker
+Documentation=https://phpray.dev
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+# ExecStart points at the /usr/bin path this package installs to (the repo's
+# configs/ example uses /usr/local/bin; do not reuse it here).
+# "serve" = collector + REST API + local web dashboard. Bound to localhost; reach it over an
+# SSH tunnel (ssh -L 9191:127.0.0.1:9191 <server>) or set [auth] secret before binding wider.
+ExecStart=/usr/bin/phpray-collector serve -c /etc/phpray/collector.toml -addr 127.0.0.1:9191
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Restart on failure, but not too aggressively.
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# Directories.
+# RuntimeDirectory would DELETE /run/phpray when the service stops. On shared
+# hosting that directory is bind-mounted into every CageFS cage and holds one
+# ring per account: deleting it leaves every cage with a stale mount of the
+# removed inode (PHP then cannot write its ring until cagefsctl --remount-all).
+# Preserve it and keep it writable for the accounts (1777, sticky).
+RuntimeDirectory=phpray
+RuntimeDirectoryMode=1777
+RuntimeDirectoryPreserve=yes
+StateDirectory=phpray
+LogsDirectory=phpray
+
+# Security hardening.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+# PHP workers write /tmp/phpray.jsonl and the ring buffer under /dev/shm: the collector must see
+# the real /tmp (no PrivateTmp) and paths that may not exist yet ("-" = ignore if missing;
+# without it systemd fails with status=226/NAMESPACE, seen on AlmaLinux 8).
+PrivateTmp=no
+# /run/phpray: per-user rings and the control table on CloudLinux/CageFS installs
+# (ProtectSystem=strict makes /run read-only without this).
+ReadWritePaths=/var/lib/phpray /dev/shm -/run/phpray -/tmp/phpray.jsonl
+ReadOnlyPaths=/etc/phpray
+
+# Resource limits.
+LimitNOFILE=65536
+MemoryMax=256M
+
+# Logging.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=phpray-collector
+
+[Install]
+WantedBy=multi-user.target

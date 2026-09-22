@@ -1,0 +1,9 @@
+# Apache + mod_php test image for PHP_INI_PERDIR behaviour (scripts/test-perdir.sh)
+ARG PHP_VERSION=8.3
+FROM php:${PHP_VERSION}-apache
+COPY src/extension/ /usr/src/phpray/
+RUN cd /usr/src/phpray && phpize && ./configure --enable-phpray && make -j"$(nproc)" >/dev/null && make install \
+    && echo "extension=phpray.so" > /usr/local/etc/php/conf.d/99-phpray.ini
+# .htaccess overrides for the docroot
+RUN printf '<Directory /var/www/html>\n    AllowOverride All\n</Directory>\n' > /etc/apache2/conf-available/zz-allowoverride.conf \
+    && a2enconf zz-allowoverride >/dev/null

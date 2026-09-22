@@ -1,0 +1,83 @@
+# PHPRay Collector Configuration
+# Copy to /etc/phpray/collector.toml
+
+[input]
+# JSONL trace file (must match phpray.output_path in php.ini)
+jsonl_path = "/tmp/phpray.jsonl"
+
+# Shared memory ring buffer (must match phpray.shm_path in php.ini).
+# A glob pattern reads several rings at once — e.g. "/run/phpray/ring-*" when php.ini has
+# phpray.shm_path = "/run/phpray/ring-%u" (one file per PHP-FPM pool uid, extension 0.15+):
+# the collector rescans the pattern every 5 s, opens rings that appear and drops rings
+# whose file went away. Without a pattern one ring is read, as before.
+shm_path = "/dev/shm/phpray"
+
+# Shared-memory control table for on-demand profiling ("profile URL X for 10 minutes"
+# from the console / DirectAdmin plugin / `phpray-collector control set`); the extension
+# maps it read-only (php.ini: phpray.control_path, same default). Empty = disabled.
+control_path = "/dev/shm/phpray-control"
+
+[storage]
+# SQLite database path
+db_path = "/var/lib/phpray/traces.db"
+
+[collector]
+# How often to poll for new records (ms)
+poll_interval_ms = 100
+
+# Batch flush interval to SQLite (seconds)
+flush_interval_s = 5
+
+# Max traces per batch write
+batch_size = 50
+
+# Aggregation frequency (seconds)
+agg_interval_s = 60
+
+# Input mode: "auto" (ring buffer preferred, JSONL fallback), "ring", "jsonl"
+mode = "auto"
+
+[retention]
+# Purge traces older than this (days)
+days = 30
+max_mb = 4096                    # hard cap on the SQLite file: oldest traces are purged beyond it
+
+[logging]
+# Log level: debug | info | warn | error
+level = "info"
+
+# Suppress periodic stats output
+quiet = false
+
+[auth]
+# JWT secret for API authentication (empty = auth disabled)
+# Can also be set via PHPRAY_JWT_SECRET environment variable
+# Also guards POST /api/v1/ingest (WordPress plugin "collector" mode): with a secret the
+# plugin needs a token (Authorization: Bearer …), without one only 127.0.0.1/::1 may post.
+secret = ""
+
+# Generate tokens:
+#   phpray-collector token -secret <key> -sub admin -role admin
+#   phpray-collector token -secret <key> -sub user1 -role user -domains "a.com,b.com"
+
+[server]
+# Path to DirectAdmin user data directory (for domain→user mapping)
+# Default: /usr/local/directadmin/data/users
+# On non-DirectAdmin servers, leave default — silently disabled.
+# da_data_path = "/usr/local/directadmin/data/users"
+
+# Shipping to a PHPRay console (PHPRay Cloud or Host Edition) — docs/spec/ingest-v1.md.
+# Outbound HTTPS only. Aggregates every minute (never dropped), traces in batches of
+# up to 500 every 5 s (alerts immediately), gzip above 8 KB, disk buffer when the
+# console is unreachable. Status: `phpray status` / GET /api/v1/health → "cloud".
+[cloud]
+enabled = false
+endpoint = "https://app.phpray.dev"
+server_key = ""                  # prk_<32 hex> from the console (one per server)
+buffer.max_mb = 32               # disk buffer limit; oldest trace batches are dropped first
+buffer.dir = ""                  # default: <db dir>/cloud-buffer
+traces.sample_rate = 100         # % of normal/full/alert traces shipped (the console may lower it)
+control = true                   # long-poll /v1/control for config/profile messages
+
+[cloud.privacy]
+mask_host = false                # send site_id instead of the hostname

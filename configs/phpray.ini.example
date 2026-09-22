@@ -1,0 +1,60 @@
+; PHPRay Configuration
+; Add to php.ini or create /etc/php.d/99-phpray.ini
+
+; Load extension
+extension=phpray.so
+
+; Enable/disable tracing
+phpray.enabled = 1
+
+; Shared memory path for ring buffer
+phpray.shm_path = /dev/shm/phpray
+
+; Ring buffer size in bytes (32MB default — plenty for 200 req/s)
+phpray.shm_size = 33554432
+
+; === SAMPLING MODE ===
+; smart  = adaptive (recommended): detail level based on response time
+;          fast requests get summary only, slow ones get full trace
+; all    = full trace every request (dev/debug only! generates lots of data)
+; manual = fixed percentage sampling (like X-Ray)
+phpray.mode = smart
+
+; === SMART MODE THRESHOLDS ===
+; Requests faster than this: only summary (50 bytes: time, URI, status)
+phpray.smart_threshold_normal = 200
+
+; Requests slower than this: full trace (all queries, curl, breakdown)
+phpray.smart_threshold_full = 1000
+
+; Requests slower than this: full trace + alert notification
+phpray.smart_threshold_alert = 3000
+
+; Always full-trace 5xx error responses (regardless of speed)
+phpray.always_trace_errors = 1
+
+; === MANUAL MODE ===
+; Percentage of requests to trace (0-100, only used when mode=manual)
+phpray.manual_sample_rate = 10
+
+; === DETAIL LEVEL ===
+; 0 = minimal (timing only)
+; 1 = normal (queries + curl calls)
+; 2 = full (+ filesystem ops + backtrace for slow requests)
+phpray.detail_level = 1
+
+; Max SQL query length to capture (bytes, longer queries truncated)
+phpray.max_query_len = 2048
+
+; Max queries to capture per request
+phpray.max_queries = 100
+
+; URIs to ignore completely (comma-separated prefixes)
+phpray.ignore_uris = /health,/ping,/favicon.ico,/robots.txt
+
+; === DATA ESTIMATES (smart mode, 200 req/s, 6000 sites) ===
+; ~90% requests <200ms  → summary 50B   → ~1 MB/h
+; ~8%  requests 200ms-1s → normal 1KB   → ~6 MB/h
+; ~2%  requests >1s      → full 5KB     → ~7 MB/h
+; Total: ~340 MB/day raw, ~100 MB/day compressed
+; 7 day retention: <1 GB total disk usage

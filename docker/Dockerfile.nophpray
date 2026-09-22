@@ -1,0 +1,17 @@
+FROM php:8.3-cli
+
+# Build dependencies (same base for fair comparison)
+RUN apt-get update && apt-get install -y \
+    apache2-utils \
+    procps \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy test files
+COPY docker/test/ /var/www/html/
+
+WORKDIR /var/www/html
+
+EXPOSE 8080
+
+CMD ["php", "-S", "0.0.0.0:8080", "-t", "/var/www/html"]

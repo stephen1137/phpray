@@ -1,0 +1,44 @@
+[Unit]
+Description=PHPRay Collector Daemon
+Documentation=https://github.com/iqhost/phpray
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+ExecStart=/usr/local/bin/phpray-collector daemon -c /etc/phpray/collector.toml
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Restart on failure, but not too aggressively
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# Directories
+RuntimeDirectory=phpray
+StateDirectory=phpray
+LogsDirectory=phpray
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/phpray /tmp/phpray.jsonl /dev/shm/phpray
+ReadOnlyPaths=/etc/phpray
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=256M
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=phpray-collector
+
+[Install]
+WantedBy=multi-user.target

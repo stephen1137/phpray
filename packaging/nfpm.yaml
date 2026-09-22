@@ -1,0 +1,75 @@
+# nfpm package definition for the PHPRay collector daemon.
+#
+# Built by the release workflow via:
+#   docker run --rm -v "$PWD:/src" -w /src \
+#     -e VERSION=<ver> -e ARCH=<arch> goreleaser/nfpm:latest \
+#     package --config packaging/nfpm.yaml --packager deb --output dist
+#
+# Version and architecture are injected from the environment (see below),
+# so a single config produces both the .deb and .rpm for both architectures.
+
+name: phpray-collector
+
+# Injected from the CI environment at pack time.
+version: ${VERSION}
+release: 3
+arch: ${ARCH}
+
+platform: linux
+section: utils
+priority: optional
+epoch: 0
+
+maintainer: "PHPRay <hello@phpray.dev>"
+vendor: PHPRay
+homepage: https://phpray.dev
+description: PHPRay collector daemon - ingests PHP request traces and stores them in SQLite
+license: Apache-2.0
+
+# Files that make up the package. `src` paths are relative to the repository
+# root (the working directory from which nfpm is invoked in CI).
+contents:
+  # Prebuilt collector binary (produced by the cross-compiled build job).
+  - src: dist/.build/phpray-collector
+    dst: /usr/bin/phpray-collector
+    file_info:
+      mode: 0755
+
+  # Default configuration, installed as a noreplace config file so user edits
+  # survive upgrades.
+  - src: configs/collector.toml.example
+    dst: /etc/phpray/collector.toml
+    file_info:
+      mode: 0644
+    type: "config|noreplace"
+
+  # Systemd unit. Installed under the vendor path; the ExecStart points at the
+  # /usr/bin location used by this package (not the /usr/local path in the
+  # repo's configs/ example).
+  - src: packaging/phpray-collector.service
+    dst: /lib/systemd/system/phpray-collector.service
+  - src: phpray-collector
+    dst: /usr/bin/phpray
+    type: symlink
+    file_info:
+      mode: 0644
+
+
+  # Runtime directories created at install time.
+  - dst: /var/lib/phpray
+    type: dir
+    file_info:
+      mode: 0750
+      owner: root
+      group: root
+  - dst: /var/log/phpray
+    type: dir
+    file_info:
+      mode: 0755
+      owner: root
+      group: root
+
+# Package scripts (see postinstall.sh / preremove.sh next to this file).
+scripts:
+  postinstall: packaging/postinstall.sh
+  preremove: packaging/preremove.sh
