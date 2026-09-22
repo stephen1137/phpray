@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  phpray:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: phpray-test
+    ports:
+      - "8080:8080"
+    volumes:
+      - phpray-traces:/tmp
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health.php"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  # Baseline container without PHPRay (for benchmark comparison)
+  baseline:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.nophpray
+    container_name: phpray-baseline
+    ports:
+      - "8081:8080"
+    profiles:
+      - benchmark
+
+volumes:
+  phpray-traces:

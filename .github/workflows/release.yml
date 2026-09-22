@@ -1,0 +1,99 @@
+# PHPRay release.
+#
+# Triggered by a v* tag. It reuses the CI build workflow (build.yml) via
+# workflow_call to produce all the artifacts (collector binaries + the PHP
+# .so matrix), then a single packaging job collects them, generates
+# SHA256SUMS, builds the .deb/.rpm system packages, and a release job
+# publishes everything to a GitHub Release with auto-generated notes.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+# Creating a GitHub Release requires write access to the repo's contents.
+permissions:
+  contents: write
+
+jobs:
+  # Reuse the CI build workflow. A workflow_call runs inside this same GitHub
+  # run, so every artifact it uploads is available to the jobs below.
+  build:
+    uses: ./.github/workflows/build.yml
+
+  # Collect the build artifacts, checksum them, and build the system packages.
+  package:
+    runs-on: ubuntu-24.04
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Collect all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          # No `name` => every artifact in the run. merge-multiple flattens
+          # them into a single dist/ directory.
+          path: dist
+          merge-multiple: true
+
+      # The collector artifact stores its binaries under bin/ (they were built
+      # to bin/phpray-collector-linux-*). Flatten them next to the .so files
+      # so the release layout is flat.
+      - name: Flatten collector binaries
+        run: |
+          if [ -d dist/bin ]; then
+            for f in dist/bin/*; do
+              if [ -f "$f" ]; then
+                mv "$f" dist/
+              fi
+            done
+            rmdir dist/bin
+          fi
+
+      - name: Generate SHA256SUMS
+        run: |
+          cd dist
+          # Checksums for every raw artifact that ships in the release (the
+          # .deb/.rpm are verified by the package manager, not SHA256SUMS).
+          sha256sum phpray-*.so phpray-collector-linux-amd64 phpray-collector-linux-arm64 > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Build packages (deb + rpm)
+        run: |
+          sudo apt-get install -y -q gettext-base >/dev/null
+          packaging/build-packages.sh "$VERSION" amd64 arm64
+
+      - name: Upload final artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: phpray-release
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    runs-on: ubuntu-24.04
+    needs: package
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: phpray-release
+          path: dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # Everything that ships: PHP extensions, collector binaries,
+          # checksums, and the system packages.
+          files: |
+            dist/phpray-*.so
+            dist/phpray-collector-linux-amd64
+            dist/phpray-collector-linux-arm64
+            dist/SHA256SUMS
+            dist/*.deb
+            dist/*.rpm
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          make_latest: true

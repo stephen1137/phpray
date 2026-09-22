@@ -1,0 +1,25 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "dev.phpray/phpray",
+  "description": "Why is this PHP site slow? Real request traces: SQL, outbound HTTP, errors, N+1. Demo needs no key.",
+  "repository": {
+    "url": "https://github.com/stephen1137/phpray",
+    "source": "github"
+  },
+  "version": "0.15.6",
+  "websiteUrl": "https://phpray.dev/mcp-server/",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://phpray.dev/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer <console token>. Omit the header entirely to use the read-only public demo account.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

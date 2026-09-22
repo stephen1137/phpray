@@ -1,0 +1,293 @@
+#!/usr/bin/env bash
+# phpray — unified CLI tool for PHPRay
+#
+# Usage:
+#   phpray status                  — check extension + collector status
+#   phpray trace <domain>          — show recent traces for domain
+#   phpray top                     — live top slow requests (htop-style)
+#   phpray diag <domain>           — run diagnostics for domain
+#   phpray tail                    — live trace stream
+#   phpray slow                    — top slow query fingerprints
+#   phpray serve                   — start collector + API + dashboard
+#   phpray install                 — run install script
+#
+# Delegates most commands to phpray-collector binary.
+
+set -euo pipefail
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+# Find collector binary
+COLLECTOR=""
+for path in \
+    /usr/local/bin/phpray-collector \
+    /usr/bin/phpray-collector \
+    "$(dirname "$0")/../bin/phpray-collector"; do
+    [[ -x "$path" ]] && COLLECTOR="$path" && break
+done
+
+# Defaults
+DEFAULT_DB="/var/lib/phpray/traces.db"
+DEFAULT_JSONL="/tmp/phpray.jsonl"
+DEFAULT_ADDR=":9191"
+
+# ─── Status command ────────────────────────────────────────────────
+cmd_status() {
+    echo -e "${BOLD}${CYAN}🔦 PHPRay Status${NC}"
+    echo ""
+
+    # Extension loaded?
+    local ext_loaded=0
+    if php -m 2>/dev/null | grep -q phpray; then
+        echo -e "  ${GREEN}✔${NC} Extension: loaded ($(php -r 'echo phpversion("phpray") ?: "unknown";' 2>/dev/null))"
+        ext_loaded=1
+    else
+        echo -e "  ${RED}✖${NC} Extension: not loaded"
+    fi
+
+    # Show PHP versions with extension
+    local found_any=0
+    for php_bin in /usr/bin/php8.* /usr/bin/php-8.* /usr/local/php*/bin/php; do
+        [[ -x "$php_bin" ]] || continue
+        local ver
+        ver="$("$php_bin" -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null)" || continue
+        if "$php_bin" -m 2>/dev/null | grep -q phpray; then
+            echo -e "    ${GREEN}✔${NC} PHP $ver: phpray loaded"
+        else
+            echo -e "    ${DIM}·${NC} PHP $ver: not loaded"
+        fi
+        found_any=1
+    done
+
+    echo ""
+
+    # Collector service
+    if systemctl is-active --quiet phpray-collector 2>/dev/null; then
+        local uptime
+        uptime="$(systemctl show phpray-collector --property=ActiveEnterTimestamp 2>/dev/null | cut -d= -f2)"
+        echo -e "  ${GREEN}✔${NC} Service: running (since $uptime)"
+    elif systemctl is-enabled --quiet phpray-collector 2>/dev/null; then
+        echo -e "  ${YELLOW}⚠${NC} Service: enabled but not running"
+    else
+        echo -e "  ${DIM}·${NC} Service: not configured"
+    fi
+
+    # API health check
+    local api_port="${PHPRAY_PORT:-9191}"
+    local health
+    health="$(curl -sf "http://localhost:${api_port}/api/v1/health" 2>/dev/null)" || true
+    if [[ -n "$health" ]]; then
+        local traces
+        traces="$(echo "$health" | grep -o '"traces":[0-9]*' | cut -d: -f2 2>/dev/null)" || traces="?"
+        echo -e "  ${GREEN}✔${NC} API: http://localhost:${api_port} ($traces traces)"
+        # Cloud shipping status (docs/spec/ingest-v1.md): from the "cloud" object of /api/v1/health
+        local cloud
+        cloud="$(echo "$health" | tr -d '\n\r\t ' | grep -o '"cloud":{[^}]*}' 2>/dev/null)" || cloud=""
+        if [[ -n "$cloud" ]]; then
+            local c_enabled c_conn c_auth c_plan c_last c_err c_files c_bytes c_sent c_agg c_drop c_rate c_ep
+            c_enabled="$(echo "$cloud" | grep -o '"enabled":[a-z]*' | cut -d: -f2)" || true
+            c_conn="$(echo "$cloud" | grep -o '"connected":[a-z]*' | cut -d: -f2)" || true
+            c_auth="$(echo "$cloud" | grep -o '"auth_failed":[a-z]*' | cut -d: -f2)" || true
+            c_plan="$(echo "$cloud" | grep -o '"plan_exhausted":[a-z]*' | cut -d: -f2)" || true
+            c_last="$(echo "$cloud" | grep -o '"last_send_at":[0-9]*' | cut -d: -f2)" || true
+            c_err="$(echo "$cloud" | grep -o '"last_error":"[^"]*"' | cut -d'"' -f4)" || true
+            c_files="$(echo "$cloud" | grep -o '"buffered_files":[0-9]*' | cut -d: -f2)" || true
+            c_bytes="$(echo "$cloud" | grep -o '"buffered_bytes":[0-9]*' | cut -d: -f2)" || true
+            c_sent="$(echo "$cloud" | grep -o '"sent_traces":[0-9]*' | cut -d: -f2)" || true
+            c_agg="$(echo "$cloud" | grep -o '"sent_aggregates":[0-9]*' | cut -d: -f2)" || true
+            c_drop="$(echo "$cloud" | grep -o '"dropped_traces":[0-9]*' | cut -d: -f2)" || true
+            c_rate="$(echo "$cloud" | grep -o '"trace_sample_rate":[0-9]*' | cut -d: -f2)" || true
+            c_ep="$(echo "$cloud" | grep -o '"endpoint":"[^"]*"' | cut -d'"' -f4)" || true
+            if [[ "$c_enabled" != "true" ]]; then
+                echo -e "  ${DIM}·${NC} Cloud: disabled ([cloud] enabled = false)"
+            elif [[ "$c_auth" == "true" ]]; then
+                echo -e "  ${RED}✖${NC} Cloud: ${c_ep} — server_key rejected (401), sending stopped"
+            elif [[ "$c_conn" == "true" ]]; then
+                local last_h="never"
+                [[ -n "$c_last" && "$c_last" != "0" ]] && last_h="$(date -d "@$c_last" '+%H:%M:%S' 2>/dev/null || echo "$c_last")"
+                local plan_note=""
+                [[ "$c_plan" == "true" ]] && plan_note=", ${YELLOW}plan exhausted — traces stopped${NC}"
+                echo -e "  ${GREEN}✔${NC} Cloud: connected to ${c_ep} (last send ${last_h}, ${c_sent:-0} traces / ${c_agg:-0} minutes sent, sample ${c_rate:-?} %${plan_note})"
+            else
+                echo -e "  ${YELLOW}⚠${NC} Cloud: not connected to ${c_ep}${c_err:+ — $c_err}"
+            fi
+            if [[ "$c_enabled" == "true" ]]; then
+                echo -e "    ${DIM}buffer: ${c_files:-0} batches / $(( ${c_bytes:-0} / 1024 )) KB on disk, ${c_drop:-0} traces dropped${NC}"
+            fi
+        fi
+    else
+        echo -e "  ${DIM}·${NC} API: not reachable on port ${api_port}"
+    fi
+
+    echo ""
+
+    # Ring buffer
+    if [[ -f /dev/shm/phpray ]]; then
+        local shm_size
+        shm_size="$(du -h /dev/shm/phpray 2>/dev/null | awk '{print $1}')"
+        echo -e "  ${GREEN}✔${NC} Ring buffer: /dev/shm/phpray ($shm_size)"
+    else
+        echo -e "  ${DIM}·${NC} Ring buffer: inactive"
+    fi
+
+    # JSONL file
+    if [[ -f "$DEFAULT_JSONL" ]]; then
+        local jsonl_size lines
+        jsonl_size="$(du -h "$DEFAULT_JSONL" 2>/dev/null | awk '{print $1}')"
+        lines="$(wc -l < "$DEFAULT_JSONL" 2>/dev/null)"
+        echo -e "  ${GREEN}✔${NC} JSONL: $DEFAULT_JSONL ($jsonl_size, $lines traces)"
+    else
+        echo -e "  ${DIM}·${NC} JSONL: no trace file"
+    fi
+
+    # Database
+    if [[ -f "$DEFAULT_DB" ]]; then
+        local db_size
+        db_size="$(du -h "$DEFAULT_DB" 2>/dev/null | awk '{print $1}')"
+        echo -e "  ${GREEN}✔${NC} Database: $DEFAULT_DB ($db_size)"
+    else
+        echo -e "  ${DIM}·${NC} Database: not created"
+    fi
+
+    echo ""
+}
+
+# ─── Diagnostics command ──────────────────────────────────────────
+cmd_diag() {
+    local domain="${1:-}"
+    [[ -z "$domain" ]] && { echo "Usage: phpray diag <domain>"; exit 1; }
+
+    local api_port="${PHPRAY_PORT:-9191}"
+    local url="http://localhost:${api_port}/api/v1/diagnostics/${domain}?window=60"
+
+    local resp
+    resp="$(curl -sf "$url" 2>/dev/null)" || {
+        echo -e "${RED}✖${NC} API not reachable. Start it with: phpray serve"
+        exit 1
+    }
+
+    # Pretty print diagnostics
+    echo -e "${BOLD}${CYAN}🩺 PHPRay Diagnostics: $domain${NC}"
+    echo ""
+
+    # Parse health score
+    local score
+    score="$(echo "$resp" | grep -o '"health_score":[0-9]*' | head -1 | cut -d: -f2)"
+    if [[ -n "$score" ]]; then
+        local color="$GREEN"
+        [[ "$score" -lt 70 ]] && color="$YELLOW"
+        [[ "$score" -lt 40 ]] && color="$RED"
+        echo -e "  Health Score: ${color}${BOLD}${score}/100${NC}"
+    fi
+
+    # Show summary
+    local summary
+    summary="$(echo "$resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('summary',''))" 2>/dev/null)" || true
+    [[ -n "$summary" ]] && echo -e "  ${DIM}$summary${NC}"
+
+    echo ""
+
+    # Show findings
+    echo "$resp" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+for f in d.get('findings', []):
+    sev = f.get('severity', 'info')
+    icon = {'critical': '🔴', 'warning': '🟡', 'info': 'ℹ️'}.get(sev, '·')
+    print(f\"  {icon} [{sev.upper()}] {f.get('title', f.get('rule', ''))}\")
+    if f.get('description'):
+        print(f\"     {f['description']}\")
+    if f.get('fix'):
+        print(f\"     💡 {f['fix']}\")
+    print()
+" 2>/dev/null || {
+        # Fallback: raw JSON
+        echo "$resp" | python3 -m json.tool 2>/dev/null || echo "$resp"
+    }
+}
+
+# ─── Main ──────────────────────────────────────────────────────────
+case "${1:-}" in
+    status|st)
+        cmd_status
+        ;;
+    diag|diagnose)
+        shift
+        cmd_diag "$@"
+        ;;
+    trace)
+        shift
+        [[ -z "$COLLECTOR" ]] && { echo "phpray-collector not found"; exit 1; }
+        exec "$COLLECTOR" trace "$@"
+        ;;
+    top)
+        shift
+        [[ -z "$COLLECTOR" ]] && { echo "phpray-collector not found"; exit 1; }
+        exec "$COLLECTOR" top "$@"
+        ;;
+    tail)
+        shift
+        [[ -z "$COLLECTOR" ]] && { echo "phpray-collector not found"; exit 1; }
+        exec "$COLLECTOR" tail "$@"
+        ;;
+    slow|slow-queries)
+        shift
+        [[ -z "$COLLECTOR" ]] && { echo "phpray-collector not found"; exit 1; }
+        exec "$COLLECTOR" slow-queries "$@"
+        ;;
+    serve)
+        shift
+        [[ -z "$COLLECTOR" ]] && { echo "phpray-collector not found"; exit 1; }
+        exec "$COLLECTOR" serve "$@"
+        ;;
+    install)
+        shift
+        exec "$(dirname "$0")/install.sh" "$@"
+        ;;
+    version|-v|--version)
+        echo -n "phpray CLI v1.0.0"
+        if [[ -n "$COLLECTOR" ]]; then
+            echo -n " | $("$COLLECTOR" version 2>&1)"
+        fi
+        echo ""
+        ;;
+    help|--help|-h)
+        echo -e "${BOLD}🔦 PHPRay — PHP request tracing for shared hosting${NC}"
+        echo ""
+        echo "Usage: phpray <command> [options]"
+        echo ""
+        echo "Commands:"
+        echo "  status              Check extension, service, and data status"
+        echo "  trace -d <domain>   Show recent traces for a domain"
+        echo "  top                 Live top slow requests (htop-style)"
+        echo "  tail                Live trace stream"
+        echo "  diag <domain>       Run diagnostics on a domain"
+        echo "  slow                Top slow query fingerprints"
+        echo "  serve               Start collector + API + dashboard"
+        echo "  install             Run install script (requires sudo)"
+        echo "  version             Show version"
+        echo ""
+        echo "Most commands pass through to phpray-collector."
+        echo "See: phpray-collector <command> --help for detailed options."
+        ;;
+    "")
+        cmd_status
+        ;;
+    *)
+        # Pass unknown commands directly to collector
+        if [[ -n "$COLLECTOR" ]]; then
+            exec "$COLLECTOR" "$@"
+        else
+            echo "Unknown command: $1 (use phpray help)"
+            exit 1
+        fi
+        ;;
+esac

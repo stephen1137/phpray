@@ -1,0 +1,48 @@
+# PHPRay Collector Configuration
+# Copy to /etc/phpray/collector.toml and adjust for your environment
+
+[input]
+# Path to JSONL trace file written by PHP extension
+jsonl_path = "/tmp/phpray.jsonl"
+
+# Path to shared memory ring buffer (future: Phase 2b)
+shm_path = "/dev/shm/phpray"
+
+[storage]
+# SQLite database path
+db_path = "/var/lib/phpray/traces.db"
+
+[collector]
+# How often to check for new JSONL lines (milliseconds)
+poll_interval_ms = 100
+
+# How often to flush pending traces to SQLite (seconds)
+flush_interval_s = 5
+
+# Maximum traces per batch write
+batch_size = 50
+
+# How often to run 1-minute aggregation (seconds)
+agg_interval_s = 60
+
+# Input mode: "auto" (ring buffer preferred, JSONL fallback), "ring", "jsonl"
+mode = "auto"
+
+[retention]
+# How many days to keep raw traces (0 = forever)
+days = 30
+
+[logging]
+# Log level: debug, info, warn, error
+level = "info"
+
+# Suppress periodic stats logging
+quiet = false
+
+[auth]
+# JWT secret for API authentication (empty = auth disabled)
+secret = ""
+
+[server]
+# Path to DirectAdmin user data directory (for domain→user mapping)
+# da_data_path = "/usr/local/directadmin/data/users"

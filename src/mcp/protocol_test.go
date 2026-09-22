@@ -1,0 +1,261 @@
+package main
+
+import (
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"testing"
+	"time"
+)
+
+// przepusc podaje serwerowi linie żądań i zwraca odpowiedzi.
+func przepusc(t *testing.T, s *server, linie ...string) []map[string]any {
+	t.Helper()
+	var buf bytes.Buffer
+	s.out = bufio.NewWriter(&buf)
+	s.run(strings.NewReader(strings.Join(linie, "\n") + "\n"))
+	var odp []map[string]any
+	for _, l := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		if l == "" {
+			continue
+		}
+		var m map[string]any
+		if err := json.Unmarshal([]byte(l), &m); err != nil {
+			t.Fatalf("odpowiedź nie jest JSON-em: %q", l)
+		}
+		odp = append(odp, m)
+	}
+	return odp
+}
+
+func TestUzgodnienieIListaNarzedzi(t *testing.T) {
+	s := &server{tools: zbudujNarzedzia(nowyKlient("http://127.0.0.1:1", "x"))}
+	odp := przepusc(t,
+		s,
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`,
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`,
+	)
+	if len(odp) != 2 {
+		t.Fatalf("powiadomienie nie powinno dostać odpowiedzi; dostałem %d", len(odp))
+	}
+	wynik := odp[0]["result"].(map[string]any)
+	if wynik["protocolVersion"] != protocolVersion {
+		t.Fatalf("wersja protokołu: %v", wynik["protocolVersion"])
+	}
+	narzedzia := odp[1]["result"].(map[string]any)["tools"].([]any)
+	if len(narzedzia) < 10 {
+		t.Fatalf("za mało narzędzi: %d", len(narzedzia))
+	}
+	for _, n := range narzedzia {
+		m := n.(map[string]any)
+		if m["name"] == "" || m["description"] == "" || m["inputSchema"] == nil {
+			t.Fatalf("niekompletne narzędzie: %v", m)
+		}
+	}
+}
+
+func TestNieznaneNarzedzieToBlad(t *testing.T) {
+	s := &server{tools: zbudujNarzedzia(nowyKlient("http://127.0.0.1:1", "x"))}
+	odp := przepusc(t, s, `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"nie_ma","arguments":{}}}`)
+	if odp[0]["error"] == nil {
+		t.Fatal("nieznane narzędzie powinno zwrócić błąd protokołu")
+	}
+}
+
+func TestBrakWymaganegoArgumentuJestCzytelny(t *testing.T) {
+	s := &server{tools: zbudujNarzedzia(nowyKlient("http://127.0.0.1:1", "x"))}
+	odp := przepusc(t, s, `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"phpray_overview","arguments":{}}}`)
+	w := odp[0]["result"].(map[string]any)
+	if w["isError"] != true {
+		t.Fatal("brak site_id powinien być zgłoszony jako błąd narzędzia")
+	}
+	tekst := w["content"].([]any)[0].(map[string]any)["text"].(string)
+	if !strings.Contains(tekst, "phpray_sites") {
+		t.Fatalf("komunikat powinien kierować do phpray_sites, jest: %q", tekst)
+	}
+}
+
+func TestSerwerPodajeTokenITnieDuzeOdpowiedzi(t *testing.T) {
+	var naglowek string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		naglowek = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"sites":[{"site":{"id":"abc","host":"sklep.pl","app":"wordpress"},"server_name":"h2","stats":{"requests":10,"p95_ms":250.5,"error_rate":0.1,"db_ms_share":0.3}}]}`))
+	}))
+	defer srv.Close()
+	s := &server{tools: zbudujNarzedzia(nowyKlient(srv.URL, "phtk_tajne"))}
+	odp := przepusc(t, s, `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"phpray_sites","arguments":{}}}`)
+	if naglowek != "Bearer phtk_tajne" {
+		t.Fatalf("token nie trafił do nagłówka: %q", naglowek)
+	}
+	tekst := odp[0]["result"].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
+	for _, oczekiwane := range []string{"abc", "sklep.pl", "wordpress", "250.5"} {
+		if !strings.Contains(tekst, oczekiwane) {
+			t.Fatalf("w tabeli brakuje %q:\n%s", oczekiwane, tekst)
+		}
+	}
+}
+
+func TestBladKonsoliJestWyjasniony(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(401)
+	}))
+	defer srv.Close()
+	s := &server{tools: zbudujNarzedzia(nowyKlient(srv.URL, "zly"))}
+	odp := przepusc(t, s, `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"phpray_sites","arguments":{}}}`)
+	w := odp[0]["result"].(map[string]any)
+	tekst := w["content"].([]any)[0].(map[string]any)["text"].(string)
+	if w["isError"] != true || !strings.Contains(tekst, "PHPRAY_TOKEN") {
+		t.Fatalf("401 powinien tłumaczyć, co zrobić; jest: %q", tekst)
+	}
+}
+
+// Do 22.09.2026 initialize nie odsylalo pola "instructions" wcale: agent
+// dostawal dziesiec narzedzi i ani slowa o tym, czyje to dane ani od czego
+// zaczac. Dwa prawdziwe klienty MCP juz sie tu wtedy logowaly.
+func TestInitializeNiesieInstrukcjeDlaModelu(t *testing.T) {
+	for _, p := range []struct {
+		nazwa string
+		demo  bool
+		musi  []string
+		niemo []string
+	}{
+		{
+			nazwa: "bez tokenu",
+			demo:  true,
+			musi: []string{"phpray_sites", "phpray_trace", "NO token", "demo account",
+				"not the data of the person", "Apache-2.0", "phpray.dev/docs/install/quickstart"},
+			niemo: []string{"carries a console token"},
+		},
+		{
+			nazwa: "z tokenem",
+			demo:  false,
+			musi:  []string{"phpray_sites", "carries a console token"},
+			niemo: []string{"NO token", "demo account", "quickstart"},
+		},
+	} {
+		t.Run(p.nazwa, func(t *testing.T) {
+			s := &server{tools: zbudujNarzedzia(nowyKlient("http://127.0.0.1:1", "x")), demo: p.demo}
+			odp := s.odpowiedz(rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "initialize"})
+			if odp == nil || odp.Error != nil {
+				t.Fatalf("initialize nie odpowiedzialo: %+v", odp)
+			}
+			wynik, ok := odp.Result.(map[string]any)
+			if !ok {
+				t.Fatalf("wynik nie jest obiektem: %T", odp.Result)
+			}
+			ins, ok := wynik["instructions"].(string)
+			if !ok || ins == "" {
+				t.Fatal("brak pola instructions w odpowiedzi na initialize")
+			}
+			for _, m := range p.musi {
+				if !strings.Contains(ins, m) {
+					t.Errorf("w instrukcjach brakuje %q", m)
+				}
+			}
+			for _, n := range p.niemo {
+				if strings.Contains(ins, n) {
+					t.Errorf("instrukcje nie powinny zawierac %q", n)
+				}
+			}
+		})
+	}
+}
+
+// Pierwszy prawdziwy klient MCP spoza naszego kregu podlaczyl sie 22.09.2026
+// o 10:41 i jedyne, co o nim wiedzialem, to dwa POST-y z kodem 200. Ten test
+// pilnuje, ze linia dziennika niesie to, po co powstala — i ze NIE niesie
+// argumentow wywolania, bo w nich stoja cudze domeny.
+func TestDziennikWywolanNiesieMetodeINarzedzieBezArgumentow(t *testing.T) {
+	stare := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+	zapiszWywolanie(rpcRequest{
+		Method: "tools/call",
+		Params: json.RawMessage(`{"name":"phpray_slow_pages","arguments":{"site":"sklep-klienta.pl"}}`),
+	}, true, "203.0.113.7", "claude-code/2.1", 1500*time.Millisecond, nil)
+	w.Close()
+	os.Stderr = stare
+	var b bytes.Buffer
+	_, _ = b.ReadFrom(r)
+	linia := b.String()
+
+	for _, musi := range []string{"metoda=tools/call", "narzedzie=phpray_slow_pages",
+		"klient=claude-code/2.1", "demo=true", "adres=203.0.113.7", "ms=1500", "ok"} {
+		if !strings.Contains(linia, musi) {
+			t.Errorf("w linii brakuje %q, jest: %s", musi, linia)
+		}
+	}
+	if strings.Contains(linia, "sklep-klienta.pl") {
+		t.Errorf("argumenty wywolania NIE moga trafiac do dziennika, jest: %s", linia)
+	}
+}
+
+// Blad ma byc widoczny w dzienniku razem z kodem — inaczej nie odroznimy
+// "wywolal i dostal odpowiedz" od "wywolal i sie wywalilo".
+func TestDziennikWywolanPokazujeKodBledu(t *testing.T) {
+	stare := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+	zapiszWywolanie(rpcRequest{Method: "tools/list"}, false, "203.0.113.8", "cursor/1.0", 5*time.Millisecond,
+		&rpcError{Code: -32601, Message: "method not found"})
+	w.Close()
+	os.Stderr = stare
+	var b bytes.Buffer
+	_, _ = b.ReadFrom(r)
+	if linia := b.String(); !strings.Contains(linia, "blad=-32601") {
+		t.Errorf("brak kodu bledu w linii: %s", linia)
+	}
+}
+
+// Nazwa klienta rozstrzyga, czy to czlowiek, czy robot indeksujacy — a przy
+// initialize prawdziwa nazwe niesie clientInfo, nie naglowek HTTP.
+// 22.09.2026 SentinelOracle i BrickBlueBot wygladaly w dzienniku dokladnie
+// jak zainteresowany deweloper.
+func TestDziennikBierzeNazweKlientaZInitialize(t *testing.T) {
+	stare := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+	zapiszWywolanie(rpcRequest{
+		Method: "initialize",
+		Params: json.RawMessage(`{"clientInfo":{"name":"claude-code","version":"2.1.0"}}`),
+	}, true, "203.0.113.9", "node", 0, nil)
+	w.Close()
+	os.Stderr = stare
+	var b bytes.Buffer
+	_, _ = b.ReadFrom(r)
+	linia := b.String()
+	if !strings.Contains(linia, "klient=claude-code/2.1.0") {
+		t.Errorf("przy initialize nazwa ma pochodzic z clientInfo, jest: %s", linia)
+	}
+	if strings.Contains(linia, "klient=node") {
+		t.Errorf("naglowek HTTP nie moze przebic clientInfo, jest: %s", linia)
+	}
+}
+
+// Bez clientInfo (kazda metoda poza initialize) zostaje nazwa klienta HTTP —
+// wlasnie tam widac SentinelOracle i BrickBlueBot.
+func TestDziennikSpadaNaNazweKlientaHTTP(t *testing.T) {
+	stare := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+	zapiszWywolanie(rpcRequest{Method: "tools/list"}, true, "203.0.113.10",
+		"SentinelOracle/0.1 (+https://glimind.com/opt-out)", 0, nil)
+	w.Close()
+	os.Stderr = stare
+	var b bytes.Buffer
+	_, _ = b.ReadFrom(r)
+	linia := b.String()
+	// Sama nazwa, bez reszty naglowka — inaczej spacje rozwala uklad pol.
+	if !strings.Contains(linia, "klient=SentinelOracle/0.1 ") {
+		t.Errorf("brak nazwy robota w linii: %s", linia)
+	}
+	if strings.Contains(linia, "glimind.com") {
+		t.Errorf("do dziennika ma trafic sama nazwa, nie caly naglowek: %s", linia)
+	}
+}

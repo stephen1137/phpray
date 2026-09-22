@@ -1,0 +1,46 @@
+# PHPRay Multi-Version Compatibility Test
+# ARG PHP_VERSION at build time
+#
+# Usage:
+#   docker build -f docker/Dockerfile.multiversion --build-arg PHP_VERSION=8.1 -t phpray-php81 .
+#   docker build -f docker/Dockerfile.multiversion --build-arg PHP_VERSION=8.2 -t phpray-php82 .
+
+ARG PHP_VERSION=8.3
+FROM php:${PHP_VERSION}-cli
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    autoconf \
+    libcurl4-openssl-dev \
+    libsqlite3-dev \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN docker-php-ext-install mysqli pdo pdo_mysql pdo_sqlite curl
+
+COPY src/extension/ /usr/src/phpray/
+
+WORKDIR /usr/src/phpray
+RUN phpize \
+    && ./configure --enable-phpray \
+    && make -j$(nproc) \
+    && make install \
+    && echo "extension=phpray.so" > /usr/local/etc/php/conf.d/99-phpray.ini
+
+RUN printf '\n\
+phpray.enabled = 1\n\
+phpray.mode = all\n\
+phpray.trace_cli = 1\n\
+phpray.capture_errors = 1\n\
+phpray.output_path = /tmp/phpray.jsonl\n\
+phpray.output_mode = both\n\
+phpray.shm_path = /dev/shm/phpray\n\
+phpray.shm_size = 1048576\n\
+' >> /usr/local/etc/php/conf.d/99-phpray.ini
+
+COPY docker/test/ /var/www/html/
+COPY docker/valgrind/valgrind_test.php /var/www/html/valgrind_test.php
+
+WORKDIR /var/www/html
+
+CMD ["sh", "-c", "echo \"=== PHPRay $(php -r 'echo PHP_VERSION;') Test ===\" && php -m | grep phpray && php /var/www/html/valgrind_test.php 20 && echo '' && echo '✅ All tests passed'"]
