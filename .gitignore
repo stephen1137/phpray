@@ -1,0 +1,62 @@
+
+*~
+# Build artifacts
+# Go
+# IDE
+# Node
+# OS
+# PHP extension build
+# Syncthing conflicts
+# Traces (dev output)
+bin/
+dist/
+.DS_Store
+*.dylib
+.idea/
+*.la
+*.lo
+*.log
+modules/
+*.o
+.omc/
+*.so
+src/agent/agent
+src/api/api
+src/collector/collector
+src/collector/phpray-collector
+src/collector/phpray-collector-*
+src/dashboard/dist/
+src/dashboard/node_modules/
+src/extension/acinclude.m4
+src/extension/aclocal.m4
+src/extension/autom4te.cache/
+src/extension/build/
+src/extension/config.guess
+src/extension/config.h
+src/extension/config.h.in
+src/extension/config.log
+src/extension/config.nice
+src/extension/config.status
+src/extension/config.sub
+src/extension/configure
+src/extension/configure.ac
+src/extension/.deps
+src/extension/include/
+src/extension/install-sh
+src/extension/.libs
+src/extension/libtool
+src/extension/ltmain.sh
+src/extension/Makefile
+src/extension/Makefile.fragments
+src/extension/Makefile.global
+src/extension/Makefile.objects
+src/extension/missing
+src/extension/mkinstalldirs
+src/extension/run-tests.php
+*.swo
+*.swp
+*.sync-conflict-*
+Thumbs.db
+/tmp/phpray.*.jsonl
+/tmp/phpray.jsonl
+.vscode/

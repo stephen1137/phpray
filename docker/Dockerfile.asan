@@ -1,0 +1,72 @@
+# PHPRay AddressSanitizer (ASAN) Build & Test
+# Detects: buffer overflows, use-after-free, double-free, stack overflows
+#
+# Usage:
+#   docker build -f docker/Dockerfile.asan -t phpray-asan .
+#   docker run --rm phpray-asan
+
+FROM php:8.3-cli
+
+# Build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    autoconf \
+    libcurl4-openssl-dev \
+    libsqlite3-dev \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install PHP extensions needed for hook testing
+RUN docker-php-ext-install mysqli pdo pdo_mysql pdo_sqlite curl
+
+# Copy extension source
+COPY src/extension/ /usr/src/phpray/
+
+# Build the extension with AddressSanitizer
+WORKDIR /usr/src/phpray
+RUN phpize \
+    && ./configure --enable-phpray \
+        CFLAGS="-g -O1 -fsanitize=address -fno-omit-frame-pointer" \
+        LDFLAGS="-fsanitize=address" \
+    && make -j$(nproc) \
+    && make install \
+    && echo "extension=phpray.so" > /usr/local/etc/php/conf.d/99-phpray.ini
+
+# PHPRay config
+RUN printf '\n\
+phpray.enabled = 1\n\
+phpray.mode = all\n\
+phpray.trace_cli = 1\n\
+phpray.emit_header = 0\n\
+phpray.capture_errors = 1\n\
+phpray.output_path = /tmp/phpray.jsonl\n\
+phpray.output_mode = both\n\
+phpray.shm_path = /dev/shm/phpray\n\
+phpray.shm_size = 1048576\n\
+' >> /usr/local/etc/php/conf.d/99-phpray.ini
+
+# dlopen shim: PHP loads extensions with RTLD_DEEPBIND, which the ASan runtime refuses;
+# preloaded before libasan it strips the flag (see docker/asan/nodeepbind.c)
+COPY docker/asan/nodeepbind.c /usr/src/nodeepbind.c
+RUN gcc -shared -fPIC -O2 -o /usr/local/lib/nodeepbind.so /usr/src/nodeepbind.c -ldl
+
+# Copy test scripts
+COPY docker/test/ /var/www/html/
+COPY docker/valgrind/valgrind_test.php /var/www/html/valgrind_test.php
+
+WORKDIR /var/www/html
+
+# Find the ASAN runtime library path and set LD_PRELOAD
+# ASAN needs to be preloaded because PHP itself isn't compiled with it
+RUN ASAN_LIB=$(gcc -print-file-name=libasan.so) && echo "ASAN lib: $ASAN_LIB" && \
+    echo "export LD_PRELOAD=$ASAN_LIB" > /etc/profile.d/asan.sh
+
+# Disable opcache — incompatible with ASAN due to RTLD_DEEPBIND
+RUN rm -f /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini 2>/dev/null; \
+    echo "opcache.enable=0" >> /usr/local/etc/php/conf.d/99-phpray.ini
+
+ENV ASAN_OPTIONS="detect_leaks=0:halt_on_error=1:print_stats=1:verify_asan_link_order=0"
+# USE_ZEND_ALLOC=0 routes emalloc() to libc malloc so ASan sees Zend MM allocations
+ENV USE_ZEND_ALLOC=0
+
+CMD ["sh", "-c", "export LD_PRELOAD=/usr/local/lib/nodeepbind.so:$(gcc -print-file-name=libasan.so) && echo '=== PHPRay ASAN Test ===' && php /var/www/html/valgrind_test.php 100 && echo '' && echo 'ASAN: No memory errors detected'"]

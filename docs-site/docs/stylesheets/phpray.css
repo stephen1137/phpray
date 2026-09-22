@@ -1,0 +1,55 @@
+/* PHPRay docs — the same design tokens as phpray.dev (spa/assets/styles.css) */
+:root, [data-md-color-scheme="slate"] {
+  --md-default-bg-color: #10141c;
+  --md-default-fg-color: #f4f5f7;
+  --md-default-fg-color--light: #a0adbf;
+  --md-default-fg-color--lighter: #6f7c90;
+  --md-default-fg-color--lightest: #2b3442;
+  --md-primary-fg-color: #10141c;
+  --md-primary-fg-color--light: #171c26;
+  --md-primary-fg-color--dark: #0b0e14;
+  --md-primary-bg-color: #f4f5f7;
+  --md-accent-fg-color: #ffbe46;
+  --md-accent-fg-color--transparent: rgba(255,190,70,.12);
+  --md-typeset-a-color: #6b9eff;
+  --md-code-bg-color: #171c26;
+  --md-code-fg-color: #f4f5f7;
+  --md-code-hl-color: rgba(255,190,70,.18);
+  --md-admonition-bg-color: #171c26;
+  --md-footer-bg-color: #0b0e14;
+  --md-footer-bg-color--dark: #0b0e14;
+  --md-footer-fg-color: #a0adbf;
+  --md-typeset-table-color: #2b3442;
+  --md-text-font: "Inter", "Segoe UI", Arial, sans-serif;
+  --md-code-font: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+[data-md-color-scheme="default"] {
+  --md-default-bg-color: #f8f9fb;
+  --md-default-fg-color: #151d2c;
+  --md-default-fg-color--light: #526178;
+  --md-primary-fg-color: #f8f9fb;
+  --md-primary-bg-color: #151d2c;
+  --md-accent-fg-color: #916000;
+  --md-typeset-a-color: #145dde;
+  --md-code-bg-color: #eef1f6;
+  --md-footer-bg-color: #151d2c;
+}
+.md-header { border-bottom: 1px solid #2b3442; box-shadow: none; backdrop-filter: blur(10px); }
+[data-md-color-scheme="default"] .md-header { border-bottom-color: #d6dce5; }
+.md-header__button.md-logo img, .md-header__button.md-logo svg { height: 1.4rem; width: 1.4rem; border-radius: .25rem; }
+.md-header__topic .md-ellipsis { font-weight: 700; letter-spacing: -.01em; }
+.md-tabs { border-bottom: 1px solid #2b3442; }
+.md-typeset h1, .md-typeset h2 { font-weight: 800; letter-spacing: -.02em; }
+.md-typeset h1 { font-size: 2.2rem; }
+.md-typeset code { border-radius: .3rem; }
+.md-typeset pre > code { border: 1px solid #2b3442; border-radius: .6rem; }
+.md-typeset table:not([class]) { border-radius: .6rem; overflow: hidden; }
+.md-typeset table:not([class]) th { background: #171c26; color: #a0adbf; font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; }
+.md-nav__link--active, .md-nav__link:hover { color: #ffbe46 !important; }
+.md-search__form { background: #171c26; border: 1px solid #2b3442; }
+[data-md-color-scheme="default"] .md-search__form { background: #fff; border-color: #d6dce5; }
+.md-typeset .admonition, .md-typeset details { border-radius: .6rem; border-width: 1px; }
+.md-footer-meta { border-top: 1px solid #2b3442; }
+/* site strip: link back to phpray.dev and the console */
+.phpray-strip { display: flex; gap: 1rem; align-items: center; font-size: .72rem; color: #a0adbf; padding: .35rem 0; }
+.phpray-strip a { color: #ffbe46; }

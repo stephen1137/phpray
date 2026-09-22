@@ -1,0 +1,16 @@
+{
+  "name": "phpray-mcp",
+  "version": "0.15.4",
+  "description": "MCP server for PHPRay: let an agent read what every PHP request in production actually did.",
+  "keywords": ["mcp", "modelcontextprotocol", "php", "performance", "tracing", "observability", "wordpress"],
+  "homepage": "https://phpray.dev",
+  "repository": { "type": "git", "url": "git+https://github.com/stephen1137/phpray.git", "directory": "src/mcp" },
+  "bugs": { "url": "https://github.com/stephen1137/phpray/issues" },
+  "license": "Apache-2.0",
+  "author": "IQgroup Adam Buhl",
+  "mcpName": "io.github.stephen1137/phpray",
+  "bin": { "phpray-mcp": "bin/phpray-mcp.js" },
+  "files": ["bin/", "install.js", "README.md"],
+  "scripts": { "postinstall": "node install.js" },
+  "engines": { "node": ">=18" }
+}

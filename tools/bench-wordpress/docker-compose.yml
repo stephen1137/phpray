@@ -1,0 +1,31 @@
+services:
+  db:
+    image: mariadb:11
+    cpuset: "2,3"
+    environment:
+      MARIADB_ROOT_PASSWORD: r
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wp
+      MARIADB_PASSWORD: wp
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  wp:
+    image: wordpress:php8.3-apache
+    cpuset: "4,5,6,7"
+    depends_on:
+      db: { condition: service_healthy }
+    ports: ["8098:80"]
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: wp
+      WORDPRESS_DB_PASSWORD: wp
+      WORDPRESS_DB_NAME: wordpress
+    volumes:
+      - wpdata:/var/www/html
+      - ./ext/phpray.so:/usr/local/lib/php/extensions/no-debug-non-zts-20230831/phpray.so:ro
+      - ./conf/zz-bench.ini:/usr/local/etc/php/conf.d/zz-bench.ini
+volumes:
+  wpdata:

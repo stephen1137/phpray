@@ -1,0 +1,208 @@
+# PHPRay CI build.
+#
+# Three jobs:
+#   collector  - cross-compile the Go collector for linux/amd64 + linux/arm64
+#   extension  - build the PHP extension across the PHP x libc x arch matrix
+#   asan       - AddressSanitizer smoke test of the extension under php -S
+#
+# Triggered on push to main, on pull requests, manually, and as a reusable
+# workflow (workflow_call) so release.yml can reuse it.
+
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request: {}
+  workflow_dispatch: {}
+  # Expose this workflow as reusable so release.yml can call it and collect the
+  # artifacts it produces (same GitHub run => artifacts are visible to the
+  # caller). No inputs are required.
+  workflow_call: {}
+
+concurrency:
+  # One in-flight run per (workflow, ref); newer runs supersede older ones on
+  # the same branch/PR.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  collector:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: src/collector/go.mod
+
+      - name: Vet
+        working-directory: src/collector
+        run: go vet ./...
+
+      - name: Test
+        working-directory: src/collector
+        run: go test ./...
+
+      # go-sqlite3 needs cgo: build a fully static (musl) binary in golang:1.24-alpine;
+      # arm64 runs under qemu (docker/setup-qemu-action).
+      - name: Set up QEMU (arm64)
+        uses: docker/setup-qemu-action@v3
+      - name: Build linux/amd64 (static, cgo)
+        run: scripts/build-collector-static.sh amd64 && mkdir -p bin && cp dist/phpray-collector-linux-amd64 bin/
+      - name: Build linux/arm64 (static, cgo, emulated)
+        run: scripts/build-collector-static.sh arm64 && cp dist/phpray-collector-linux-arm64 bin/
+
+      - name: Upload collector artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phpray-collector
+          path: |
+            bin/phpray-collector-linux-amd64
+            bin/phpray-collector-linux-arm64
+          if-no-files-found: error
+
+  extension:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.0', '8.1', '8.2', '8.3', '8.4', '8.5']
+        libc: [glibc, musl]
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine runner architecture
+        id: arch
+        run: |
+          case "${{ runner.arch }}" in
+            X64)   echo "arch=amd64"  >> "$GITHUB_OUTPUT" ;;
+            ARM64) echo "arch=arm64"  >> "$GITHUB_OUTPUT" ;;
+            *)     echo "arch=${{ runner.arch }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      # glibc and musl come from different builders on purpose. The php:X-cli
+      # images are Debian and produce binaries that need GLIBC_2.33, which will
+      # not load on EL8 (CloudLinux, AlmaLinux, Rocky) — the systems this
+      # extension mostly runs on. The glibc variant is therefore built on
+      # AlmaLinux 8 with PHP from Remi, and the floor is asserted below.
+      - name: Build extension (docker matrix)
+        env:
+          LIBCS: ${{ matrix.libc }}
+          ARCH: ${{ steps.arch.outputs.arch }}
+        run: |
+          set -o pipefail
+          if [ "${{ matrix.libc }}" = glibc ]; then
+            bash scripts/build-matrix-el8.sh "${{ matrix.php }}" 2>&1 | tee build-output.txt
+          else
+            bash scripts/build-matrix.sh "${{ matrix.php }}" 2>&1 | tee build-output.txt
+          fi
+          # The matrix scripts print one row per PHP/LIBC/ARCH with a status
+          # column that is either OK or BŁĄD (Polish "error"). Fail the step if
+          # any row is not OK.
+          if grep -qE '(^| )BŁĄD( |$)' build-output.txt; then
+            echo "::error::One or more build-matrix rows failed (see build-output.txt)"
+            exit 1
+          fi
+          ls -1 dist/*.so
+
+      - name: Assert the glibc floor
+        if: matrix.libc == 'glibc'
+        run: |
+          zle=0
+          for f in dist/*.so; do
+            maks=$(objdump -T "$f" | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -V | tail -1)
+            echo "$f -> ${maks:-brak}"
+            case "$maks" in
+              GLIBC_2.1[0-9]|GLIBC_2.[1-9]|"") ;;
+              *) echo "::error::$f needs $maks; EL8 provides 2.28 and we target 2.17"; zle=1 ;;
+            esac
+          done
+          exit $zle
+
+      - name: Show build output
+        if: failure()
+        run: cat build-output.txt
+
+      - name: Upload extension artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phpray-ext-${{ matrix.php }}-${{ matrix.libc }}-${{ steps.arch.outputs.arch }}
+          path: dist/*.so
+          if-no-files-found: error
+
+  asan:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: ASAN smoke test
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD/src/extension:/src:ro" \
+            -v "$PWD/docker:/docker:ro" \
+            php:8.3-cli bash -c '
+              set -euo pipefail
+
+              # Build toolchain + curl (the php image has gcc/make/autoconf but
+              # may not have curl).
+              if ! command -v curl >/dev/null 2>&1; then
+                apt-get update -y
+                apt-get install -y --no-install-recommends curl
+              fi
+
+              # Build the extension with AddressSanitizer enabled.
+              cp -r /src /build
+              cd /build
+              export CFLAGS="-fsanitize=address -g -O1"
+              export LDFLAGS="-fsanitize=address"
+              phpize >/dev/null
+              ./configure --enable-phpray >/dev/null
+              make -j"$(nproc)" >/dev/null
+
+              # Run a tiny web server with the ASAN-instrumented extension
+              # loaded and hammer every test page.
+              export ASAN_OPTIONS="detect_leaks=0:abort_on_error=1"
+              php -d extension=modules/phpray.so -S 127.0.0.1:8080 -t /docker/test \
+                > /tmp/phpray-server.log 2>&1 &
+              server_pid=$!
+              sleep 3
+
+              curl_failed=0
+              for page in /docker/test/*.php; do
+                [ -f "$page" ] || continue
+                name="$(basename "$page")"
+                for i in $(seq 1 50); do
+                  if ! curl -fsS "http://127.0.0.1:8080/$name" >/dev/null; then
+                    curl_failed=1
+                    break 2
+                  fi
+                done
+              done
+
+              kill "$server_pid" 2>/dev/null || true
+              wait "$server_pid" 2>/dev/null || true
+
+              if grep -q "AddressSanitizer" /tmp/phpray-server.log; then
+                echo "::error::AddressSanitizer detected in the PHP server log"
+                echo "----- server log -----"
+                cat /tmp/phpray-server.log
+                exit 1
+              fi
+
+              if [ "$curl_failed" -eq 1 ]; then
+                echo "::error::Server crashed or returned an error during the smoke test"
+                tail -n 50 /tmp/phpray-server.log
+                exit 1
+              fi
+
+              echo "OK: no AddressSanitizer errors, all requests succeeded"
+            '

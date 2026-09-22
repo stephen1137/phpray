@@ -1,0 +1,4 @@
+# PHP_INI_PERDIR directives take effect per directory under mod_php even when
+# phpray.enabled=0 in php.ini — hooks are installed in MINIT regardless of enabled.
+php_value phpray.enabled 1
+php_value phpray.profile_mode all
