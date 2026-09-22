@@ -17,6 +17,15 @@ less phpray-install.sh          # it asks for root; read it first
 sudo bash phpray-install.sh && phpray top
 ```
 
+**Rather look before installing anything?** Three ways in, none of them needing
+root, an account or a card:
+
+- [A real report from a production WooCommerce shop](https://phpray.dev/przyklad-raportu/)
+  — one HTML file, the site name removed. This is the output, not a mockup.
+- [The console on live traffic](https://app.phpray.dev/demo) — read-only, no sign-up.
+- Point an agent at it: `claude mcp add --transport http phpray https://phpray.dev/mcp`
+  answers from the same demo data with no key ([details](https://phpray.dev/mcp-server/)).
+
 ![Local dashboard: requests over time, p95, errors](docs/img/dashboard-overview.jpg)
 
 ## What it looks like

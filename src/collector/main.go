@@ -12,6 +12,7 @@
 //	phpray-collector daemon        — run as background collector service
 //	phpray-collector serve         — daemon + API + WebSocket live streaming
 //	phpray-collector agg-query     — query per-minute aggregates from SQLite
+//	phpray-collector update        — download and install the latest release
 package main
 
 import (
@@ -21,7 +22,7 @@ import (
 	"time"
 )
 
-const version = "0.15.6" // 0.15.6: pierwsze uruchomienie bez strasznych błędów, podpowiedzi bez systemd, panel kieruje na /en/cloud; rozszerzenie bez zmian od 0.15.5. 0.15.5: wyścig przy zapisie do ringu, top, panel lokalny, MCP; ingest protocol v1 frozen since 0.14
+const version = "0.15.8" // 0.15.8: naprawa zakleszczonego ringu — pozycja czytania przed pozycja zapisu kazala pisarzowi uznawac bufor za pelny NA ZAWSZE; na h2 gubilo to 23,4% sladow, jedno konto 90%. 0.15.7: 0.15.7: `phpray-collector update` — kanal aktualizacji z weryfikacja SHA-256; do tej wersji kolektor nie mial jak dowiedziec sie o nowym wydaniu ani sie zaktualizowac, przez co nasz wlasny h2 siedzial dwa wydania w tyle. 0.15.6: 0.15.6: pierwsze uruchomienie bez strasznych błędów, podpowiedzi bez systemd, panel kieruje na /en/cloud; rozszerzenie bez zmian od 0.15.5. 0.15.5: wyścig przy zapisie do ringu, top, panel lokalny, MCP; ingest protocol v1 frozen since 0.14
 
 func main() {
 	if len(os.Args) < 2 {
@@ -58,6 +59,8 @@ func main() {
 		cmdControl(os.Args[2:])
 	case "status":
 		cmdStatus(os.Args[2:])
+	case "update":
+		cmdUpdate(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Printf("phpray-collector v%s\n", version)
 	default:
@@ -107,6 +110,8 @@ Control table (on-demand profiling, shared memory read by the extension at RINIT
 
 Other:
   version       Show version
+  update        Download and install the latest release (verifies SHA-256).
+                --check only reports whether a newer release exists.
 
 Common Options:
   -f <path>    JSONL file path (default: /tmp/phpray.jsonl)

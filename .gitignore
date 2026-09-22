@@ -60,3 +60,8 @@ Thumbs.db
 /tmp/phpray.*.jsonl
 /tmp/phpray.jsonl
 .vscode/
+
+# Wynik `go build` w katalogu zrodel — 9,5 MB z 13 MB calego repozytorium.
+# Do 22.09.2026 lezal w kodzie publicznym i to pierwsza rzecz, jaka widzi
+# ktos oceniajacy projekt z katalogu MCP.
+src/mcp/phpray-mcp

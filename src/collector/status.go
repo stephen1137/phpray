@@ -37,7 +37,7 @@ func cmdStatus(args []string) {
 		}
 		return "MISSING"
 	}
-	fmt.Printf("phpray-collector v%s\n\n", version)
+	fmt.Printf("phpray-collector v%s%s\n\n", version, dopiskoWydania())
 
 	// PHP binaries: the usual system binary plus per-version installs.
 	fmt.Println("PHP extension")

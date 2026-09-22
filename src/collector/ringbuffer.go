@@ -14,7 +14,7 @@ import (
 // Ring buffer constants — must match ringbuffer.h
 const (
 	ringMagic         = 0x50485259 // "PHRY"
-	ringVersion       = 5 // v4: app + profiled in header, incl/self per component; v5: docroot string
+	ringVersion       = 5          // v4: app + profiled in header, incl/self per component; v5: docroot string
 	ringVersionV4     = 4
 	ringVersionV3     = 3
 	ringVersionV2     = 2
@@ -24,7 +24,6 @@ const (
 	recordTypePadding = 0xFF
 	// Slot zaklepany przez pisarza, dane jeszcze w locie. Czytelnik czeka.
 	recordTypeReserved = 0xFE
-
 )
 
 // Po tym czasie uznajemy, ze pisarz zginal miedzy rezerwacja a zapisem
@@ -63,18 +62,19 @@ const recordHeaderSize = 5 // packed: 4 + 1
 
 // RingReader reads from a shared memory ring buffer created by phpray.so
 type RingReader struct {
-	data     []byte       // mmap'd region (header + data)
-	header   *RingHeader  // points into data
-	dataBase uintptr      // start of data region
+	data     []byte      // mmap'd region (header + data)
+	header   *RingHeader // points into data
+	dataBase uintptr     // start of data region
 	capacity uint64
-	file     *os.File     // kept open for the mapping's lifetime; closed by Close (never by a finalizer)
-	version  uint32       // ring buffer version (1..6)
+	file     *os.File // kept open for the mapping's lifetime; closed by Close (never by a finalizer)
+	version  uint32   // ring buffer version (1..6)
 
 	// Bezpiecznik na niedokonczony rekord: zapamietujemy, od kiedy stoimy
 	// w tym samym miejscu, zeby martwy pisarz nie zatrzymal calego ringu.
-	czekaOd  time.Time
-	czekaPoz uint64
-	Porzucone uint64 // sloty pominiete po utknieciu — do metryk
+	czekaOd    time.Time
+	czekaPoz   uint64
+	Porzucone  uint64 // sloty pominiete po utknieciu — do metryk
+	Odwrocenia uint64 // ile razy ring byl zakleszczony i zostal wyrownany
 }
 
 // OpenRing opens an existing ring buffer for reading
@@ -139,6 +139,22 @@ func (r *RingReader) ReadRecord() (uint8, []byte, bool) {
 		readPos := atomic.LoadUint64(&r.header.ReadPos)
 		writePos := atomic.LoadUint64(&r.header.WritePos)
 
+		// Pozycja czytania PRZED pozycja zapisu to stan niemozliwy, ktory
+		// zakleszcza ring NA ZAWSZE: pisarz w rozszerzeniu liczy wolne
+		// miejsce jako `write_pos - read_pos` na uint64, wiec po odwroceniu
+		// dostaje liczbe rzedu 10^19, uznaje bufor za pelny i odrzuca KAZDY
+		// kolejny slad. 22.09.2026 na h2 tak zakleszczone byly cztery ringi:
+		// 24 654 zgubionych sladow z 80 501 (23,4%), jedno konto traci 90%.
+		// Czytelnik jest jedyna strona, ktora moze to naprawic — i robi to
+		// tutaj, wyrownujac pozycje zamiast czekac na nowe rozszerzenie.
+		if readPos > writePos {
+			atomic.StoreUint64(&r.header.ReadPos, writePos)
+			r.Odwrocenia++
+			log.Printf("ring: pozycja czytania wyprzedzila zapis (%d > %d) — ring byl zakleszczony, wyrownuje",
+				readPos, writePos)
+			return 0, nil, false
+		}
+
 		if readPos >= writePos {
 			return 0, nil, false // No data
 		}
@@ -149,7 +165,7 @@ func (r *RingReader) ReadRecord() (uint8, []byte, bool) {
 		// Check if we can read a record header
 		if tailSpace < recordHeaderSize {
 			// Skip gap (was padding from wraparound)
-			atomic.StoreUint64(&r.header.ReadPos, readPos+tailSpace)
+			r.przesunCzytanie(readPos+tailSpace, writePos)
 			continue
 		}
 
@@ -180,7 +196,7 @@ func (r *RingReader) ReadRecord() (uint8, []byte, bool) {
 				readPos, skok, utkniecieSlotu)
 			r.Porzucone++
 			r.wyczyscNaglowek(offset)
-			atomic.StoreUint64(&r.header.ReadPos, readPos+skok)
+			r.przesunCzytanie(readPos+skok, writePos)
 			r.czekaOd = time.Time{}
 			continue
 		}
@@ -188,7 +204,7 @@ func (r *RingReader) ReadRecord() (uint8, []byte, bool) {
 
 		if uint64(hdr.RecordLen) > r.capacity {
 			// Corrupt — skip 8 bytes
-			atomic.StoreUint64(&r.header.ReadPos, readPos+8)
+			r.przesunCzytanie(readPos+8, writePos)
 			continue
 		}
 
@@ -197,7 +213,7 @@ func (r *RingReader) ReadRecord() (uint8, []byte, bool) {
 		// Skip padding records
 		if hdr.RecordType == recordTypePadding {
 			r.wyczyscNaglowek(offset)
-			atomic.StoreUint64(&r.header.ReadPos, readPos+paddedTotal)
+			r.przesunCzytanie(readPos+paddedTotal, writePos)
 			continue
 		}
 
@@ -212,10 +228,24 @@ func (r *RingReader) ReadRecord() (uint8, []byte, bool) {
 		r.wyczyscNaglowek(offset)
 
 		// Advance read position
-		atomic.StoreUint64(&r.header.ReadPos, readPos+paddedTotal)
+		r.przesunCzytanie(readPos+paddedTotal, writePos)
 
 		return hdr.RecordType, payload, true
 	}
+}
+
+// przesunCzytanie przesuwa pozycje czytania, NIGDY poza pozycje zapisu.
+//
+// Kazde z pieciu miejsc, ktore przesuwaly ja wprost, moglo ja przeskoczyc:
+// przy pomijaniu luki na koncu bufora, przy porzucaniu niedokonczonego slotu,
+// przy uszkodzonej dlugosci rekordu i przy rekordzie wypelniajacym. Przeskok
+// o jeden bajt wystarczy, zeby pisarz przestal zapisywac cokolwiek — patrz
+// komentarz przy wykryciu odwrocenia w ReadRecord.
+func (r *RingReader) przesunCzytanie(nowa, writePos uint64) {
+	if nowa > writePos {
+		nowa = writePos
+	}
+	atomic.StoreUint64(&r.header.ReadPos, nowa)
 }
 
 // utknal mowi, czy stoimy na tej samej pozycji dluzej niz utkniecieSlotu.
@@ -240,13 +270,35 @@ func (r *RingReader) Stats() (records, drops uint64, fillPct float64) {
 	records = atomic.LoadUint64(&r.header.RecordCount)
 	drops = atomic.LoadUint64(&r.header.DropCount)
 
-	wp := atomic.LoadUint64(&r.header.WritePos)
+	// Kolejnosc ma znaczenie: czytamy NAJPIERW pozycje czytania, potem zapisu,
+	// zeby wp bylo co najmniej tak swieze jak rp. Obie wartosci pobieramy
+	// osobnymi operacjami atomowymi, wiec i tak moga sie rozjechac w czasie.
 	rp := atomic.LoadUint64(&r.header.ReadPos)
-	used := wp - rp
-	if r.capacity > 0 {
-		fillPct = float64(used) / float64(r.capacity) * 100.0
-	}
+	wp := atomic.LoadUint64(&r.header.WritePos)
+	fillPct = zapelnienie(wp, rp, r.capacity)
 	return
+}
+
+// zapelnienie liczy procent zajetosci ringu, odporny na rozjazd pozycji.
+//
+// 22.09.2026 na h2 dziennik pisal "buffer 109952421083179.7% full": odejmowanie
+// wp-rp na uint64 przewinelo sie pod zero, bo pozycja czytania wyprzedzila
+// zapis miedzy dwoma odczytami atomowymi. Bezsensowny procent ukrywal
+// prawdziwa sprawe — ring NAPRAWDE gubil slady (2037 sztuk) i nie dalo sie
+// zobaczyc, jak bardzo jest pelny.
+func zapelnienie(wp, rp uint64, capacity uint64) float64 {
+	if capacity == 0 {
+		return 0
+	}
+	if wp < rp {
+		// Czytelnik dogonil lub wyprzedzil zapis — nic nie zalega.
+		return 0
+	}
+	used := wp - rp
+	if used > capacity {
+		used = capacity
+	}
+	return float64(used) / float64(capacity) * 100.0
 }
 
 // Version returns the ring buffer format version (1..4)
@@ -288,7 +340,7 @@ func DeserializeTrace(data []byte, ringVer ...uint32) (*Trace, error) {
 	if len(ringVer) > 0 && ringVer[0] > 0 {
 		ver = ringVer[0]
 	}
-	_ = ver // used below
+	_ = ver             // used below
 	if len(data) < 90 { // minimum fixed header size
 		return nil, fmt.Errorf("data too short: %d bytes", len(data))
 	}

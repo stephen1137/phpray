@@ -14,6 +14,14 @@ package main
 //
 // Kazdy z nich MUSI dzialac na koncie demo, bez tokenu — bo dokladnie tam
 // trafia ktos, kto nas wlasnie dodal.
+//
+// NAZWY PO ANGIELSKU. Czesc klientow MCP pokazuje prompt po NAZWIE, jako
+// polecenie (/what_is_slow), nie po tytule. Pierwsza wersja miala nazwy
+// polskie — francuski deweloper, ktory nas dodal tego samego dnia, mialby
+// wpisywac "/co_jest_wolne". Nazwy narzedzi sa po angielsku od poczatku
+// i nazwy promptow musza byc tak samo, bo to ten sam rodzaj identyfikatora.
+// Poprawione 22.09.2026, godzine po wypuszczeniu, gdy Glama i verifymcp
+// zaczely czytac prompts/list.
 
 type prompt struct {
 	Name        string
@@ -25,7 +33,7 @@ type prompt struct {
 func prompty() []prompt {
 	return []prompt{
 		{
-			Name:        "co_jest_wolne",
+			Name:        "what_is_slow",
 			Title:       "What is slow here?",
 			Description: "Walk the fleet, find the site that hurts most and say why — in plain words.",
 			Tresc: "Use the PHPRay tools to find what is slow.\n\n" +
@@ -39,7 +47,7 @@ func prompty() []prompt {
 				"and what you would look at first. Name the numbers you used.",
 		},
 		{
-			Name:        "ktora_wtyczka",
+			Name:        "which_plugin_costs_most",
 			Title:       "Which plugin costs the most?",
 			Description: "Attribute request time to WordPress plugins and themes, with the numbers.",
 			Tresc: "Find which plugin or theme costs the most time.\n\n" +
@@ -51,7 +59,7 @@ func prompty() []prompt {
 				"missing, say that per-function profiling is off rather than guessing.",
 		},
 		{
-			Name:        "co_sie_psuje",
+			Name:        "what_is_failing",
 			Title:       "Is anything failing right now?",
 			Description: "Check alerts and failing requests, and separate real breakage from scanner noise.",
 			Tresc: "Check whether anything is failing.\n\n" +
@@ -63,7 +71,7 @@ func prompty() []prompt {
 				"instead of reporting the raw count.",
 		},
 		{
-			Name:        "co_sie_zmienilo",
+			Name:        "what_got_worse",
 			Title:       "Did anything get worse?",
 			Description: "Compare two time windows to see whether a deploy or an update made things slower.",
 			Tresc: "Check whether anything got worse recently.\n\n" +

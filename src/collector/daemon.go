@@ -156,7 +156,8 @@ func (d *Daemon) IngestTrace(t Trace) {
 
 // inputStatus reports the configured input and the rings currently open.
 func (d *Daemon) inputStatus() InputStatus {
-	st := InputStatus{Mode: d.cfg.Mode, SHMPath: d.cfg.SHMPath, Glob: d.rings != nil}
+	st := InputStatus{Mode: d.cfg.Mode, SHMPath: d.cfg.SHMPath,
+		JSONLPath: d.cfg.JSONLPath, Glob: d.rings != nil}
 	if d.rings != nil {
 		st.Rings = d.rings.status()
 	}

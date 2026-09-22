@@ -123,6 +123,7 @@ table{width:100%;border-collapse:collapse;font-size:11px}th{text-align:left;padd
 
 <!-- TAB: Overview -->
 <div class="tc active" id="t-overview">
+  <div id="pusto" style="display:none"></div>
   <div class="stats" id="stats"></div>
   <div class="two">
     <div class="pn"><div class="ph">Top Domains</div><table><thead><tr><th>Domain</th><th>Reqs</th><th>Avg</th><th>Max</th><th>Errors</th><th>N+1</th></tr></thead><tbody id="dom-ov"></tbody></table></div>
@@ -315,8 +316,53 @@ else{
       el.className='cloud-cta';
       el.title='Free for one site. The local core stays unlimited and needs no account.';}
 el.style.display='inline-block';}catch(e){}}
+// Co widzi ktos, kto wlasnie zainstalowal PHPRaya i otworzyl panel.
+//
+// Do 22.09.2026: same zera i gole "No data" w jednym kafelku. Zadnego
+// wyjasnienia, DLACZEGO nic nie ma, ani co zrobic dalej. A to jest dokladnie
+// moment, w ktorym czlowiek uznaje, ze produkt nie dziala, i odinstalowuje.
+//
+// Kolektor ma czym odpowiedziec: input.rings mowi, czy JAKIKOLWIEK proces PHP
+// z rozszerzeniem juz wystartowal i zalozyl pierscien w pamieci dzielonej.
+// Puste rings + zero sladow = rozszerzenie nie weszlo do tego SAPI. Najczestsza
+// przyczyna: ini trafilo do conf.d PHP-CLI, a serwer WWW ma wlasne i nie zostal
+// przeladowany. To zupelnie inny problem niz "wszystko dziala, brak ruchu",
+// i wymaga innego kroku — wiec mowimy, ktory to przypadek.
+async function stanPusty(o){
+  const box=E('pusto'); if(!box) return;
+  if(!o || (o.total_requests||0)>0){box.style.display='none';return;}
+  let h=null;
+  try{const r=await fetch(A+'/health',{headers:hdr()});if(r.ok)h=await r.json();}catch(e){}
+  const rings=(h&&h.input&&h.input.rings)||[];
+  // Wejscia sa DWA i na swiezej instalacji uzywane jest to drugie:
+  // rozszerzenie ma domyslnie output_mode=file i pisze do /tmp/phpray.jsonl,
+  // a nie do pamieci dzielonej. Pierwsza wersja tego komunikatu wymieniala
+  // tylko shm_path i kierowala czlowieka do sprawdzania pliku, ktorego
+  // domyslnie nikt nie uzywa.
+  const wejscia=[(h&&h.input&&h.input.jsonl_path)||'/tmp/phpray.jsonl',
+                 (h&&h.input&&h.input.shm_path)||'/dev/shm/phpray']
+                .filter(Boolean).map(x=>`<code>${x}</code>`).join(' or ');
+  const tresc = rings.length
+    ? `<b>The extension is loaded, but nothing has been recorded yet.</b><br>
+       PHPRay is reading ${wejscia} and waiting for requests.
+       Open a page on your site, then refresh.`
+    : `<b>No PHP request has been recorded yet.</b><br>
+       Nothing has arrived at ${wejscia}, which the collector is watching.
+       Two things to check:<br>
+       &nbsp;1. <code>php -m | grep phpray</code> — that covers the command line.<br>
+       &nbsp;2. <b>Your web server has its own PHP configuration</b>, separate from
+       the CLI one. Make sure the PHPRay ini is in its <code>conf.d</code> too,
+       and restart it (<code>systemctl reload php*-fpm</code> or your web server).<br>
+       Then send one request to your site and refresh this page.`;
+  box.innerHTML=`<div style="border:1px solid var(--accent);border-radius:8px;padding:14px 16px;
+    margin:0 0 14px;font-size:12.5px;line-height:1.65">${tresc}</div>`;
+  box.style.display='block';
+}
+function hdr(){const tk=getToken();return tk?{'Authorization':'Bearer '+tk}:{}}
+
 async function go(){const f=F();
 const o=await J(`/overview?window=${f.w}`);
+stanPusty(o);
 if(o){E('status').textContent=`${o.total_requests} traces · ${new Date().toLocaleTimeString()}`;cloudCta();
 E('stats').innerHTML=[
 {l:'Requests',v:o.total_requests},{l:'Avg',v:ms(o.avg_duration_ms),c:o.avg_duration_ms>1000?'y':'g'},

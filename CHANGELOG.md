@@ -1,5 +1,69 @@
 # Changelog
 
+## 0.15.8 — 2026-09-22
+
+**A wedged ring buffer silently discarded every trace, forever.** This is the
+most damaging bug we have shipped: on our own shared host, 24,654 of 80,501
+traces were lost — **23.4%** — and one account was losing **90%** of its
+traffic. The product's central claim is "every request, not a sample", and on
+that machine it was false.
+
+The mechanism: the extension decides whether a record fits by computing
+`write_pos - read_pos` on a `uint64`. If the read position ever gets *ahead*
+of the write position, that subtraction wraps to roughly 10^19, the writer
+concludes the buffer is full and drops **every** record from then on. Nothing
+recovers it — the ring stays dead until the file is removed.
+
+The reader could move ahead of the writer at five separate places: skipping a
+gap at the end of the buffer, abandoning a slot whose writer died between
+reserving and filling it, skipping a record whose length was corrupt, and
+stepping over a padding record. None of them checked that the new position
+stayed behind the writer.
+
+- Every advance is now clamped so the read position can never pass the write
+  position.
+- If a ring is found already inverted, the reader **repairs it** by levelling
+  the positions and logs it. That matters: it means existing wedged rings
+  recover as soon as the collector is updated, without touching the extension
+  or restarting anyone's PHP.
+- `Stats()` no longer reports fill percentages like `109952421083179.7%`,
+  which is what made this look cosmetic for a day.
+
+Found by updating our own server and actually reading its log — the first time
+we had looked at what was running there.
+
+The extension is unchanged in this release. Hardening the writer's own
+arithmetic against the same inversion is still to do; the reader-side repair
+is what makes the fix deployable today.
+
+## 0.15.7 — 2026-09-22
+
+**The collector can now update itself, on demand.** Until this release there
+was no update channel for the server side at all: the collector had no way to
+learn that a newer release existed and no way to fetch it. The proof that this
+mattered was on our own infrastructure — the shared host we run PHPRay on was
+still on 0.15.4 while 0.15.6 had been out for a day, and nothing anywhere
+would have said so.
+
+- `phpray-collector update` downloads the release for this architecture,
+  **verifies its SHA-256 against the published SHA256SUMS before replacing
+  anything**, keeps the previous binary next to the new one as
+  `phpray-collector.poprzedni`, and then tells you to restart the service.
+- `phpray-collector update --check` only reports, downloads nothing.
+- No background self-update and no telemetry. It fetches two static files by
+  GET and does nothing until you type the command. A tool that watches other
+  people's production has no business replacing its own binary unasked.
+- If the binary's directory is not writable, it says so **before** downloading
+  twelve megabytes, and prints the exact `sudo` command for your install path.
+
+The PHP extension still updates separately — it is a different file per PHP
+version and needs PHP-FPM reloaded — and `update` says so explicitly rather
+than leaving you to find out.
+
+**The extension is unchanged in this release**, so the `.so` files still
+report `0.15.5`, deliberately: a version number describes the artifact, and
+this artifact did not change.
+
 ## 0.15.6 — 2026-09-22
 
 **The extension is unchanged in this release.** Its source has not moved since

@@ -23,10 +23,16 @@ type MetricsProvider interface {
 // InputStatus describes the trace inputs of the running daemon
 // (/api/v1/health "input", `phpray status`).
 type InputStatus struct {
-	Mode    string       `json:"mode"`
-	SHMPath string       `json:"shm_path"`
-	Glob    bool         `json:"glob"`  // shm_path is a pattern: one ring per PHP-FPM pool
-	Rings   []RingStatus `json:"rings"` // rings currently open (glob mode)
+	Mode    string `json:"mode"`
+	SHMPath string `json:"shm_path"`
+	// JSONLPath to DRUGIE wejscie i na swiezej instalacji wlasnie ono jest
+	// uzywane: rozszerzenie ma domyslnie output_mode=file i pisze do
+	// /tmp/phpray.jsonl. Panel bez tego pola kierowal czlowieka do
+	// sprawdzania pamieci dzielonej, ktorej domyslnie nikt nie uzywa —
+	// czyli podpowiadal nie ten plik, co trzeba.
+	JSONLPath string       `json:"jsonl_path"`
+	Glob      bool         `json:"glob"`  // shm_path is a pattern: one ring per PHP-FPM pool
+	Rings     []RingStatus `json:"rings"` // rings currently open (glob mode)
 }
 
 // RingStatus is one open ring buffer.

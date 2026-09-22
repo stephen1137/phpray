@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-var version = "0.15.6"
+var version = "0.15.7"
 
 func main() {
 	for _, a := range os.Args[1:] {

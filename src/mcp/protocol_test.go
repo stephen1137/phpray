@@ -327,3 +327,52 @@ func TestSerwerOglaszaIOddajePrompty(t *testing.T) {
 		t.Error("nieznany prompt ma dawac blad, nie pustke")
 	}
 }
+
+// Nazwy promptow sa IDENTYFIKATORAMI pokazywanymi uzytkownikowi — czesc
+// klientow robi z nich polecenia (/what_is_slow). Pierwsza wersja miala
+// nazwy polskie, a produkt jest angielski i tego samego dnia dodal nas
+// deweloper z Francji.
+func TestNazwyPromptowSaPoAngielsku(t *testing.T) {
+	// Litery spoza ASCII i polskie dwuznaki w identyfikatorze to blad.
+	for _, p := range prompty() {
+		for _, r := range p.Name {
+			if r > 127 {
+				t.Errorf("nazwa promptu %q ma znak spoza ASCII: %q", p.Name, r)
+			}
+			if !(r == '_' || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
+				t.Errorf("nazwa promptu %q ma niedozwolony znak %q", p.Name, r)
+			}
+		}
+		for _, polskie := range []string{"co_", "ktora", "sie_", "jest_wolne", "psuje", "zmienilo", "wtyczka"} {
+			if strings.Contains(p.Name, polskie) {
+				t.Errorf("nazwa promptu %q wyglada na polska (%q) — klient pokazuje ja uzytkownikowi",
+					p.Name, polskie)
+			}
+		}
+	}
+}
+
+// Goly komunikat "unknown tool X" nie pomaga ani czlowiekowi, ani walidatorowi
+// katalogu. Odpowiedz na bledne wywolanie jest przy okazji wizytowka jakosci.
+func TestBledyMowiaCoJestDostepne(t *testing.T) {
+	s := &server{tools: zbudujNarzedzia(nowyKlient("http://127.0.0.1:1", "x")), demo: true}
+
+	odp := s.odpowiedz(rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "tools/call",
+		Params: json.RawMessage(`{"name":"__nie_ma__"}`)})
+	if odp.Error == nil {
+		t.Fatal("nieznane narzedzie ma dawac blad")
+	}
+	if !strings.Contains(odp.Error.Message, "phpray_sites") {
+		t.Errorf("blad nie wymienia dostepnych narzedzi: %s", odp.Error.Message)
+	}
+
+	odp = s.odpowiedz(rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("2"), Method: "server/discover"})
+	if odp.Error == nil {
+		t.Fatal("nieznana metoda ma dawac blad")
+	}
+	for _, musi := range []string{"tools/list", "prompts/list"} {
+		if !strings.Contains(odp.Error.Message, musi) {
+			t.Errorf("blad metody nie wymienia %q: %s", musi, odp.Error.Message)
+		}
+	}
+}

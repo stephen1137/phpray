@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 )
 
@@ -161,6 +162,15 @@ func (s *server) run(in io.Reader) {
 	}
 }
 
+// nazwyNarzedzi zwraca same nazwy narzedzi — do komunikatu bledu.
+func nazwyNarzedzi(t []toolSpec) []string {
+	n := make([]string, 0, len(t))
+	for _, x := range t {
+		n = append(n, x.Name)
+	}
+	return n
+}
+
 func (s *server) handle(req rpcRequest) {
 	if odp := s.odpowiedz(req); odp != nil {
 		s.send(*odp)
@@ -257,10 +267,20 @@ func (s *server) odpowiedz(req rpcRequest) *rpcResponse {
 				"content": []map[string]any{{"type": "text", "text": text}},
 			})
 		}
-		return zle(-32601, fmt.Sprintf("unknown tool %q", p.Name))
+		// Nie samo "unknown tool": podajemy, jakie sa. Goły komunikat nie
+		// pomaga ani czlowiekowi, ani walidatorowi katalogu, ktory wlasnie
+		// ocenia nasz serwer — 22.09.2026 verifymcp-probe wywolal celowo
+		// nieistniejace narzedzie, sprawdzajac, czy nie wyciekamy danych.
+		return zle(-32601, fmt.Sprintf("unknown tool %q; available: %s",
+			p.Name, strings.Join(nazwyNarzedzi(s.tools), ", ")))
 	default:
 		if len(req.ID) > 0 {
-			return zle(-32601, "method not found: "+req.Method)
+			// server/discover probowaly juz trzy niezalezne klienty i nie ma
+			// go w specyfikacji — nie zgadujemy jego ksztaltu, ale mowimy,
+			// co obslugujemy, zeby probujacy nie musial zgadywac.
+			return zle(-32601, "method not found: "+req.Method+
+				"; supported: initialize, tools/list, tools/call, "+
+				"prompts/list, prompts/get, ping")
 		}
 	}
 	return nil
