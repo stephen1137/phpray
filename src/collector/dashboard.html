@@ -188,7 +188,7 @@ table{width:100%;border-collapse:collapse;font-size:11px}th{text-align:left;padd
 
 <!-- TAB: Diagnostics -->
 <div class="tc" id="t-diagnostics">
-  <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:8px"><span id="exp-msg" style="font-size:11px;color:var(--muted,#8792a1)"></span><button onclick="exportReport()" style="background:var(--accent);color:#fff;border:none;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer">Export Report</button></div>
+  <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:8px"><span id="exp-msg" style="font-size:11px;color:var(--muted,#8792a1)"></span><button onclick="exportReport()" style="background:var(--accent);color:#fff;border:none;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer">Export Report</button><button onclick="shareReport()" title="Publish a link you can paste to a client. Site name removed, expires in 30 days, not indexed." style="background:transparent;color:var(--accent);border:1px solid var(--accent);padding:5px 12px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer">Share a link</button></div>
   <div id="diag-content"><p style="color:var(--dim)">Loading diagnostics...</p></div>
 </div>
 
@@ -292,6 +292,24 @@ const blob=await r.blob();const url=URL.createObjectURL(blob);
 const a=document.createElement('a');a.href=url;a.download='phpray-report-'+d+'.html';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
 exp_msg('Saved as phpray-report-'+d+'.html — one file, safe to send to anyone.');}
 catch(e){exp_msg('Could not build the report: '+(e&&e.message?e.message:e),1);}}
+
+// Publikacja linkiem. Plik trzeba zapisac, znalezc i doslac; link wkleja sie
+// klientowi w rozmowie. To jest roznica miedzy narzedziem, o ktorym wie jeden
+// czlowiek, a narzedziem, ktore kazdy uzytkownik pokazuje swojemu klientowi.
+async function shareReport(){const f=F();const d=f.d||'';
+if(!d){exp_msg('Pick a domain in the filter first — a report is about one site.',1);return;}
+const tk=getToken();const h={};if(tk)h['Authorization']='Bearer '+tk;
+exp_msg('Publishing a link…');
+try{const r=await fetch(A+'/diagnostics/'+encodeURIComponent(d)+'/share?window='+f.w,{method:'POST',headers:h});
+if(!r.ok){exp_msg('Could not publish the report ('+r.status+').',1);return;}
+const j=await r.json();
+let kiedy='';try{kiedy=' Expires '+new Date(j.expires_at).toISOString().slice(0,10)+'.';}catch(e){}
+if(navigator.clipboard&&navigator.clipboard.writeText){
+  navigator.clipboard.writeText(j.url).then(
+    ()=>exp_msg('Link copied — site name removed.'+kiedy),
+    ()=>prompt('Shareable link:',j.url));
+}else{prompt('Shareable link:',j.url);}}
+catch(e){exp_msg('Could not publish the report: '+(e&&e.message?e.message:e),1);}}
 
 function bn(r){const t=r.duration_ms||.01,db=r.db_ms||0,http=r.http_ms||0,redis=r.redis_ms||0,php=Math.max(0,t-db-http-(r.file_ms||0)-redis);
 const p=[{n:'PHP',v:php},{n:'DB',v:db,q:r.db_count},{n:'HTTP',v:http},{n:'Redis',v:redis}];p.sort((a,b)=>b.v-a.v);const top=p[0];

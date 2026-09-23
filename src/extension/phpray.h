@@ -25,7 +25,7 @@
 
 /* Extension name and version */
 #define PHPRAY_NAME    "phpray"
-#define PHPRAY_VERSION "0.15.5"
+#define PHPRAY_VERSION "0.15.9"
 
 /* Limits */
 #define PHPRAY_MAX_URI_LEN        1024

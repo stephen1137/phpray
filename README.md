@@ -17,10 +17,14 @@ less phpray-install.sh          # it asks for root; read it first
 sudo bash phpray-install.sh && phpray top
 ```
 
+After a few minutes of traffic, `phpray report --domain example.com --share`
+prints a link you can send to a client: the site name is removed, the link
+expires, and the recipient needs nothing installed to read it.
+
 **Rather look before installing anything?** Three ways in, none of them needing
 root, an account or a card:
 
-- [A real report from a production WooCommerce shop](https://phpray.dev/przyklad-raportu/)
+- [A real report from a production WooCommerce shop](https://phpray.dev/example-report/)
   — one HTML file, the site name removed. This is the output, not a mockup.
 - [The console on live traffic](https://app.phpray.dev/demo) — read-only, no sign-up.
 - Point an agent at it: `claude mcp add --transport http phpray https://phpray.dev/mcp`
@@ -190,6 +194,22 @@ One self-contained file — no external requests, no fonts, no scripts — with 
 health score, what was found, what it costs and what to do about it. With
 `-anonymize` the domain is replaced everywhere, including inside the findings and
 the evidence, so the same report can go on a forum or into a proposal.
+
+People share links, not attachments, so the same findings can be published as
+a page:
+
+```bash
+phpray report -domain shop.example -w 60 -share
+https://app.phpray.dev/r/dklns4bdbf74bdtetbxhbxtcey
+```
+
+No account and no card — this works from the collector in this repository.
+What leaves the server is the findings **data**, never a document: the page is
+rendered from it by our template. The site name is stripped from every text
+field, evidence lines included, so `shop.example/checkout/` is published as
+`/checkout/`. The address carries 128 bits of randomness, expires after 30
+days and is not indexed. `-share-url` points the same command at your own
+copy of the console.
 
 ## What a trace contains
 

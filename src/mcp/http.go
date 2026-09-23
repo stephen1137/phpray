@@ -160,8 +160,50 @@ func zapiszWywolanie(req rpcRequest, demo bool, adres, klient string, trwalo tim
 	if blad != nil {
 		wynik = fmt.Sprintf("blad=%d", blad.Code)
 	}
-	fmt.Fprintf(os.Stderr, "mcp metoda=%s narzedzie=%s klient=%s demo=%v adres=%s ms=%d %s\n",
-		req.Method, narzedzie, klient, demo, adres, trwalo.Milliseconds(), wynik)
+	linia := fmt.Sprintf("%s mcp metoda=%s narzedzie=%s klient=%s demo=%v adres=%s ms=%d %s\n",
+		time.Now().UTC().Format(time.RFC3339), req.Method, narzedzie, klient,
+		demo, adres, trwalo.Milliseconds(), wynik)
+	fmt.Fprint(os.Stderr, linia)
+	dziennik(linia)
+}
+
+// dziennikPlik to jedyne miejsce, w ktorym zostaje slad po tym, KTO uzywa
+// naszego publicznego serwera MCP.
+//
+// 23.09.2026 chcialem sprawdzic, czy ktos wolal `tools/call`, czy wszyscy tylko
+// ogladaja. `docker logs` mial SIEDEMNASCIE linii — bo pisalismy na stderr,
+// a kontener zostal odtworzony przy moim wdrozeniu pol godziny wczesniej.
+// Kazde wdrozenie kasowalo historie jedynego kanalu, ktory naprawde
+// przyprowadza nam obcych ludzi.
+//
+// Plik, nie baza: to sa dwie linie tekstu na wywolanie, a serwer MCP celowo
+// nie trzyma zadnego stanu ani polaczenia do bazy.
+var (
+	dziennikMu   sync.Mutex
+	dziennikPlik *os.File
+)
+
+func otworzDziennik(sciezka string) error {
+	if sciezka == "" {
+		return nil
+	}
+	f, err := os.OpenFile(sciezka, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o640)
+	if err != nil {
+		return err
+	}
+	dziennikPlik = f
+	return nil
+}
+
+func dziennik(linia string) {
+	if dziennikPlik == nil {
+		return
+	}
+	dziennikMu.Lock()
+	defer dziennikMu.Unlock()
+	// Blad zapisu nie moze przewrocic obslugi zadania: dziennik jest do
+	// mierzenia, a nie do dzialania serwera.
+	_, _ = dziennikPlik.WriteString(linia)
 }
 
 func (u *uslugaHTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -190,11 +232,45 @@ func (u *uslugaHTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		// Bez tego naglowka pod adres trafia czlowiek albo katalog MCP —
-		// takiemu oddajemy opis, a nie blad.
+		// PRZEGLADARKA dostaje strone, nie JSON.
+		//
+		// 22.09.2026 o 20:39 ktos przyszedl z Binga na "/", a zaraz potem na
+		// "/mcp" — przegladarka, Chrome na Windows. Zobaczyl 371 bajtow
+		// surowego JSON-a. Znalazl nas sam, kliknal dalej i trafil w sciane
+		// danych zamiast w strone, ktora ma jedna linie instalacji, przyklady
+		// pytan i liste narzedzi. Tylu ludzi nas dzis znajduje, ze stracic
+		// jednego w ten sposob to duzo.
+		//
+		// Rozrozniamy po Accept, nie po User-Agent: naglowek Accept mowi, CZEGO
+		// klient chce, a UA tylko, za co sie podaje. Katalogi MCP i klienci
+		// dostaja JSON dokladnie jak dotad — ich Accept nie zawiera text/html.
+		if strings.Contains(r.Header.Get("Accept"), "text/html") {
+			http.Redirect(w, r, "https://phpray.dev/mcp-server/?via=mcp", http.StatusSeeOther)
+			return
+		}
+		// Bez tego naglowka pod adres trafia katalog MCP albo narzedzie
+		// wiersza polecen — takiemu oddajemy opis, a nie blad.
 		pisz(w, http.StatusOK, map[string]any{
-			"name":            "phpray",
-			"version":         version,
+			"name": "phpray",
+			// Opis, ikona i strona — bo to jest to, z czego katalogi buduja
+			// SWOJ wpis o nas. 23.09.2026 w dziennikach Caddy siedzialo
+			// dziesiec robotow katalogow MCP pytajacych o ten adres
+			// (mcp-drift-monitor, mcphub-probe, ProofBench, io.verifymcp,
+			// GlideMcpIndex, exaforce-mcprep, MCPMeter i inne), a deskryptor
+			// nie niosl ANI SLOWA opisu. Kazdy z nich musial go sobie skądś
+			// wziac albo zostawic puste pole.
+			//
+			// Opis jest ten sam, co w oficjalnym rejestrze MCP — jedno zdanie
+			// w dwoch miejscach, zeby katalogi nie opisywaly nas rozbieznie.
+			"description": "Ask an agent why a PHP site is slow: every request with its SQL, HTTP calls, errors and N+1.",
+			"icon":        "https://phpray.dev/icon-512.png",
+			"website":     "https://phpray.dev",
+			"license":     "Apache-2.0",
+			// Bez tokena kazdy moze sprawdzic narzedzia od reki — to jest
+			// rzecz, ktora odroznia nas od wiekszosci wpisow w katalogu,
+			// wiec musi byc widoczna w polu, a nie tylko w zdaniu.
+			"authRequired":   false,
+			"version":        version,
 			"protocolVersion": protocolVersion,
 			// Katalogi skanują /mcp, /sse i /api/mcp; wszystkie trzy trafiają
 			// tutaj, więc każda z nich musi powiedzieć, gdzie jest ta właściwa.

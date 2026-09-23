@@ -43,7 +43,7 @@ func pobierzTekst(url string) (string, error) {
 	}
 	defer o.Body.Close()
 	if o.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("%s oddal %d", url, o.StatusCode)
+		return "", fmt.Errorf("%s returned %d", url, o.StatusCode)
 	}
 	b, err := io.ReadAll(io.LimitReader(o.Body, 1<<20))
 	return strings.TrimSpace(string(b)), err
@@ -55,12 +55,12 @@ var reWydanie = regexp.MustCompile(`^v(\d+)\.(\d+)\.(\d+)$`)
 func nowszy(tag, obecna string) (bool, error) {
 	m := reWydanie.FindStringSubmatch(tag)
 	if m == nil {
-		return false, fmt.Errorf("nieoczekiwany znacznik wydania: %q", tag)
+		return false, fmt.Errorf("unexpected release tag: %q", tag)
 	}
 	o := strings.SplitN(obecna, "-", 2)[0]
 	n := strings.Split(o, ".")
 	if len(n) != 3 {
-		return false, fmt.Errorf("nieoczekiwana wersja wbudowana: %q", obecna)
+		return false, fmt.Errorf("unexpected built-in version: %q", obecna)
 	}
 	for i := 0; i < 3; i++ {
 		a, _ := strconv.Atoi(m[i+1])
@@ -78,7 +78,7 @@ func nazwaPliku() (string, error) {
 	case "amd64", "arm64":
 		return "phpray-collector-linux-" + runtime.GOARCH, nil
 	default:
-		return "", fmt.Errorf("brak wydania dla architektury %s", runtime.GOARCH)
+		return "", fmt.Errorf("no release for architecture %s", runtime.GOARCH)
 	}
 }
 
@@ -90,7 +90,7 @@ func sumaZManifestu(manifest, nazwa string) (string, error) {
 			return p[0], nil
 		}
 	}
-	return "", fmt.Errorf("w SHA256SUMS nie ma wpisu dla %s", nazwa)
+	return "", fmt.Errorf("SHA256SUMS has no entry for %s", nazwa)
 }
 
 func cmdUpdate(args []string) {
@@ -100,7 +100,7 @@ func cmdUpdate(args []string) {
 
 	tag, err := pobierzTekst(bazaWydan + "/LATEST")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "nie udało się sprawdzić wydań: %v\n", err)
+		fmt.Fprintf(os.Stderr, "could not check for releases: %v\n", err)
 		os.Exit(1)
 	}
 	jest, err := nowszy(tag, version)
@@ -109,11 +109,11 @@ func cmdUpdate(args []string) {
 		os.Exit(1)
 	}
 	if !jest {
-		fmt.Printf("masz najnowsze wydanie: v%s\n", version)
+		fmt.Printf("you are on the newest release: v%s\n", version)
 		return
 	}
-	fmt.Printf("jest nowsze wydanie: %s (masz v%s)\n", tag, version)
-	fmt.Printf("  opis zmian: https://phpray.dev/dl/\n")
+	fmt.Printf("a newer release is available: %s (you have v%s)\n", tag, version)
+	fmt.Printf("  what changed: https://phpray.dev/dl/\n")
 	if *tylkoSprawdz {
 		return
 	}
@@ -129,15 +129,15 @@ func cmdUpdate(args []string) {
 	// Lepiej powiedziec to teraz niz po sciagnieciu dwunastu megabajtow.
 	sciezka, err := os.Executable()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "nie wiem, gdzie leżę: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cannot tell where this binary lives: %v\n", err)
 		os.Exit(1)
 	}
 	sciezka, _ = filepath.EvalSymlinks(sciezka)
 	katalog := filepath.Dir(sciezka)
 	probny, err := os.CreateTemp(katalog, ".phpray-update-")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "brak prawa zapisu w %s.\n", katalog)
-		fmt.Fprintf(os.Stderr, "Uruchom ponownie z podniesionymi prawami:\n  sudo %s update\n", sciezka)
+		fmt.Fprintf(os.Stderr, "no write permission in %s.\n", katalog)
+		fmt.Fprintf(os.Stderr, "Run it again with elevated rights:\n  sudo %s update\n", sciezka)
 		os.Exit(1)
 	}
 	tymczasowy := probny.Name()
@@ -146,7 +146,7 @@ func cmdUpdate(args []string) {
 	manifest, err := pobierzTekst(fmt.Sprintf("%s/%s/SHA256SUMS", bazaWydan, tag))
 	if err != nil {
 		sprzataj()
-		fmt.Fprintf(os.Stderr, "nie udało się pobrać SHA256SUMS: %v\n", err)
+		fmt.Fprintf(os.Stderr, "could not download SHA256SUMS: %v\n", err)
 		os.Exit(1)
 	}
 	oczekiwana, err := sumaZManifestu(manifest, nazwa)
@@ -156,24 +156,24 @@ func cmdUpdate(args []string) {
 		os.Exit(1)
 	}
 
-	fmt.Printf("pobieram %s …\n", url)
+	fmt.Printf("downloading %s …\n", url)
 	o, err := klientAktualizacji.Get(url)
 	if err != nil {
 		sprzataj()
-		fmt.Fprintf(os.Stderr, "pobieranie nie powiodło się: %v\n", err)
+		fmt.Fprintf(os.Stderr, "download failed: %v\n", err)
 		os.Exit(1)
 	}
 	defer o.Body.Close()
 	if o.StatusCode != http.StatusOK {
 		sprzataj()
-		fmt.Fprintf(os.Stderr, "%s oddał %d\n", url, o.StatusCode)
+		fmt.Fprintf(os.Stderr, "%s returned %d\n", url, o.StatusCode)
 		os.Exit(1)
 	}
 	h := sha256.New()
 	n, err := io.Copy(io.MultiWriter(probny, h), o.Body)
 	if err != nil {
 		sprzataj()
-		fmt.Fprintf(os.Stderr, "zapis nie powiódł się: %v\n", err)
+		fmt.Fprintf(os.Stderr, "writing the file failed: %v\n", err)
 		os.Exit(1)
 	}
 	probny.Close()
@@ -181,11 +181,11 @@ func cmdUpdate(args []string) {
 	suma := hex.EncodeToString(h.Sum(nil))
 	if suma != oczekiwana {
 		os.Remove(tymczasowy)
-		fmt.Fprintf(os.Stderr, "SUMA KONTROLNA SIĘ NIE ZGADZA — nie podmieniam pliku.\n")
-		fmt.Fprintf(os.Stderr, "  oczekiwana: %s\n  pobrana:    %s\n", oczekiwana, suma)
+		fmt.Fprintf(os.Stderr, "CHECKSUM MISMATCH — the file has not been replaced.\n")
+		fmt.Fprintf(os.Stderr, "  expected: %s\n  received: %s\n", oczekiwana, suma)
 		os.Exit(1)
 	}
-	fmt.Printf("pobrane %.1f MB, suma kontrolna zgodna\n", float64(n)/1048576)
+	fmt.Printf("downloaded %.1f MB, checksum matches\n", float64(n)/1048576)
 
 	// Zachowaj prawa dotychczasowego pliku, zeby usluga dalej dzialala.
 	if st, err := os.Stat(sciezka); err == nil {
@@ -202,19 +202,19 @@ func cmdUpdate(args []string) {
 	}
 	if err := os.Rename(tymczasowy, sciezka); err != nil {
 		os.Remove(tymczasowy)
-		fmt.Fprintf(os.Stderr, "podmiana pliku nie powiodła się: %v\n", err)
+		fmt.Fprintf(os.Stderr, "replacing the file failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("zaktualizowane: %s → %s\n", sciezka, tag)
+	fmt.Printf("updated: %s → %s\n", sciezka, tag)
 	if _, err := os.Stat(kopia); err == nil {
-		fmt.Printf("  poprzednia wersja: %s\n", kopia)
+		fmt.Printf("  previous version: %s\n", kopia)
 	}
-	fmt.Printf("\nCo jeszcze trzeba zrobić ręcznie:\n")
-	fmt.Printf("  1. Uruchom ponownie usługę, żeby wziąć nowy plik:\n")
-	fmt.Printf("       systemctl restart phpray-collector   # albo Twój sposób uruchamiania\n")
-	fmt.Printf("  2. Rozszerzenie PHP aktualizuje się OSOBNO (to inny plik, .so na każdą\n")
-	fmt.Printf("     wersję PHP) i wymaga przeładowania PHP-FPM:\n")
+	fmt.Printf("\nWhat still has to be done by hand:\n")
+	fmt.Printf("  1. Restart the service so it picks up the new binary:\n")
+	fmt.Printf("       systemctl restart phpray-collector   # or however you run it\n")
+	fmt.Printf("  2. The PHP extension updates SEPARATELY (a different file, one .so per\n")
+	fmt.Printf("     PHP version) and needs a PHP-FPM reload:\n")
 	fmt.Printf("       curl -fsSL https://phpray.dev/install.sh -o phpray-install.sh\n")
 	fmt.Printf("       less phpray-install.sh && sudo bash phpray-install.sh\n")
 }

@@ -376,3 +376,101 @@ func TestBledyMowiaCoJestDostepne(t *testing.T) {
 		}
 	}
 }
+
+// Stopka pod wynikiem phpray_sites to jedyne miejsce, w ktorym czlowiek po
+// drugiej stronie agenta dowiaduje sie, CZYJE sa te liczby i jak miec je
+// u siebie. Test pilnuje trzech rzeczy naraz, bo kazda z nich zepsuta osobno
+// zamienia te stopke w halas albo w reklame we wlasnym produkcie:
+// jest na narzedziu wejsciowym, NIE MA jej na pozostalych, i nie ma jej wcale,
+// gdy klient laczy sie wlasnym tokenem.
+func TestStopkaTylkoNaWejsciuITylkoWDemo(t *testing.T) {
+	const slad = "https://phpray.dev"
+	for _, p := range []struct {
+		nazwa     string
+		demo      bool
+		narzedzie string
+		chce      bool
+	}{
+		{"demo, narzedzie wejsciowe", true, "phpray_sites", true},
+		{"demo, kolejne narzedzie", true, "phpray_overview", false},
+		{"wlasny token, narzedzie wejsciowe", false, "phpray_sites", false},
+		{"wlasny token, kolejne narzedzie", false, "phpray_overview", false},
+	} {
+		t.Run(p.nazwa, func(t *testing.T) {
+			got := stopka(p.demo, p.narzedzie)
+			if p.chce && !strings.Contains(got, slad) {
+				t.Fatalf("brak odnosnika do produktu w stopce: %q", got)
+			}
+			if !p.chce && got != "" {
+				t.Fatalf("stopka nie powinna tu wystapic, jest: %q", got)
+			}
+		})
+	}
+	// Tresc, nie sam odnosnik: ostrzezenie „to nie sa dane tej osoby" chroni
+	// czlowieka przed wzieciem cudzego sklepu za swoj, a licencja i brak roota
+	// sa jedynym powodem, dla ktorego ktos moze to u siebie odpalic od reki.
+	s := stopka(true, "phpray_sites")
+	for _, m := range []string{"NOT the data of the person", "Apache-2.0",
+		"without root", "shared hosting",
+		// bez tego znacznika ruch z MCP zleje sie z bezposrednim i kanalu
+		// nie da sie zmierzyc; lejek.py liczy go osobnym wierszem
+		"?via=mcp"} {
+		if !strings.Contains(s, m) {
+			t.Errorf("w stopce brakuje %q", m)
+		}
+	}
+}
+
+// 23.09.2026 o 01:07 audytor SaSame-MCP-Audit przeszedl przez serwer pelna
+// sciezka i na `resources/list` dostal -32601. Zasoby to wlasciwe miejsce na
+// tresc, ktora agent ma PRZEKAZAC czlowiekowi — narzedzia odpowiadaja o cudzych
+// danych demo, a phpray://install mowi, jak miec to samo u siebie.
+func TestZasobyOdpowiadajaINiosaSciezkeDoNas(t *testing.T) {
+	s := &server{tools: zbudujNarzedzia(nowyKlient("http://127.0.0.1:1", "x")), demo: true}
+
+	odp := s.odpowiedz(rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "resources/list"})
+	if odp == nil || odp.Error != nil {
+		t.Fatalf("resources/list nie odpowiedzialo: %+v", odp)
+	}
+	lista := odp.Result.(map[string]any)["resources"].([]map[string]any)
+	if len(lista) < 2 {
+		t.Fatalf("zasobow %d, oczekiwano co najmniej 2", len(lista))
+	}
+	for _, z := range lista {
+		for _, k := range []string{"uri", "name", "description", "mimeType"} {
+			if z[k] == nil || z[k] == "" {
+				t.Errorf("zasob %v bez pola %q — katalog pokaze puste miejsce", z["uri"], k)
+			}
+		}
+	}
+
+	// Sama lista nic nie daje: tresc musi dac sie PRZECZYTAC.
+	o2 := s.odpowiedz(rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("2"), Method: "resources/read",
+		Params: json.RawMessage(`{"uri":"phpray://install"}`)})
+	if o2 == nil || o2.Error != nil {
+		t.Fatalf("resources/read nie odpowiedzialo: %+v", o2)
+	}
+	tekst := o2.Result.(map[string]any)["contents"].([]map[string]any)[0]["text"].(string)
+	// To sa rzeczy, dla ktorych ten zasob w ogole istnieje.
+	for _, m := range []string{"phpray.dev/install.sh", "No root", "shared hosting",
+		"Apache-2.0", "8.0 to 8.5"} {
+		if !strings.Contains(tekst, m) {
+			t.Errorf("w phpray://install brakuje %q", m)
+		}
+	}
+
+	// Ostrzezenie, ze to NIE sa dane tej osoby — to samo, co w instrukcjach.
+	o3 := s.odpowiedz(rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("3"), Method: "resources/read",
+		Params: json.RawMessage(`{"uri":"phpray://demo"}`)})
+	demo := o3.Result.(map[string]any)["contents"].([]map[string]any)[0]["text"].(string)
+	if !strings.Contains(demo, "not the data of the person") {
+		t.Error("phpray://demo nie ostrzega, ze to nie sa dane tej osoby")
+	}
+
+	// Nieznany uri: blad z podpowiedzia, nie gole 'not found'.
+	o4 := s.odpowiedz(rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("4"), Method: "resources/read",
+		Params: json.RawMessage(`{"uri":"phpray://nie-ma"}`)})
+	if o4 == nil || o4.Error == nil || !strings.Contains(o4.Error.Message, "resources/list") {
+		t.Errorf("blad dla nieznanego zasobu nie mowi, gdzie szukac nazw: %+v", o4)
+	}
+}

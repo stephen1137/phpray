@@ -106,6 +106,11 @@ func (a *API) setupRoutes() {
 		r.Get("/diagnostics", a.handleDiagnostics)
 		r.Get("/diagnostics/{domain}", a.handleDiagnostics)
 		r.Get("/diagnostics/{domain}/report", a.handleDiagReport)
+		// Publikacja linkiem. Lokalny panel jest jedynym miejscem, ktore
+		// widzi KAZDY, kto zainstalowal PHPRaya sam — a to tam jest wejscie
+		// do petli wzrostu. Flaga w CLI, o ktorej nikt nie wie, nie roznosi
+		// produktu.
+		r.Post("/diagnostics/{domain}/share", a.handleDiagShare)
 		r.Get("/components", a.handleComponents)
 		r.Get("/php-versions", a.handlePhpVersions)
 		r.Get("/alerts", a.handleAlerts)
@@ -146,19 +151,19 @@ func (a *API) handleOverview(w http.ResponseWriter, r *http.Request) {
 	cutoff := time.Now().Unix() - int64(windowMin)*60
 
 	var overview struct {
-		TotalRequests int64   `json:"total_requests"`
-		AvgDuration   float64 `json:"avg_duration_ms"`
-		MaxDuration   float64 `json:"max_duration_ms"`
-		P95Duration   float64 `json:"p95_duration_ms"`
-		ErrorCount    int64   `json:"error_count"`
-		ErrorRate     float64 `json:"error_rate_pct"`
-		N1Count       int64   `json:"n1_count"`
-		N1Rate        float64 `json:"n1_rate_pct"`
-		TotalQueries  int64   `json:"total_queries"`
-		TotalHTTP     int64   `json:"total_http_calls"`
-		UniqueDomains int64   `json:"unique_domains"`
+		TotalRequests int64            `json:"total_requests"`
+		AvgDuration   float64          `json:"avg_duration_ms"`
+		MaxDuration   float64          `json:"max_duration_ms"`
+		P95Duration   float64          `json:"p95_duration_ms"`
+		ErrorCount    int64            `json:"error_count"`
+		ErrorRate     float64          `json:"error_rate_pct"`
+		N1Count       int64            `json:"n1_count"`
+		N1Rate        float64          `json:"n1_rate_pct"`
+		TotalQueries  int64            `json:"total_queries"`
+		TotalHTTP     int64            `json:"total_http_calls"`
+		UniqueDomains int64            `json:"unique_domains"`
 		LevelCounts   map[string]int64 `json:"level_counts"`
-		WindowMinutes int     `json:"window_minutes"`
+		WindowMinutes int              `json:"window_minutes"`
 	}
 	overview.LevelCounts = make(map[string]int64)
 	overview.WindowMinutes = windowMin
@@ -332,34 +337,34 @@ func (a *API) handleTraceDetail(w http.ResponseWriter, r *http.Request) {
 
 	// Main trace
 	var t struct {
-		ID         int64   `json:"id"`
-		PhprayID   string  `json:"phpray_id"`
-		Timestamp  int64   `json:"timestamp"`
-		UID        int     `json:"uid"`
-		Username   string  `json:"username"`
-		Host       string  `json:"host"`
-		Method     string  `json:"method"`
-		URI        string  `json:"uri"`
-		URIFp      string  `json:"uri_fingerprint"`
-		Status     int     `json:"status"`
-		DurationMs float64 `json:"duration_ms"`
-		CPUUserMs  float64 `json:"cpu_user_ms"`
-		CPUSysMs   float64 `json:"cpu_sys_ms"`
-		MemoryMB   float64 `json:"memory_peak_mb"`
-		DBCount    int     `json:"db_count"`
-		DBMs       float64 `json:"db_ms"`
-		HTTPCount  int     `json:"http_count"`
-		HTTPMs     float64 `json:"http_ms"`
-		FileCount  int     `json:"file_count"`
-		FileMs     float64 `json:"file_ms"`
-		RedisCount int     `json:"redis_count"`
-		RedisMs    float64 `json:"redis_ms"`
-		WP         int     `json:"wp"`
-		N1         int     `json:"n1"`
-		Level      string  `json:"level"`
-		PhpVersion string  `json:"php_version,omitempty"`
-		Profiled   int     `json:"profiled"`
-		App        string  `json:"app,omitempty"`
+		ID         int64         `json:"id"`
+		PhprayID   string        `json:"phpray_id"`
+		Timestamp  int64         `json:"timestamp"`
+		UID        int           `json:"uid"`
+		Username   string        `json:"username"`
+		Host       string        `json:"host"`
+		Method     string        `json:"method"`
+		URI        string        `json:"uri"`
+		URIFp      string        `json:"uri_fingerprint"`
+		Status     int           `json:"status"`
+		DurationMs float64       `json:"duration_ms"`
+		CPUUserMs  float64       `json:"cpu_user_ms"`
+		CPUSysMs   float64       `json:"cpu_sys_ms"`
+		MemoryMB   float64       `json:"memory_peak_mb"`
+		DBCount    int           `json:"db_count"`
+		DBMs       float64       `json:"db_ms"`
+		HTTPCount  int           `json:"http_count"`
+		HTTPMs     float64       `json:"http_ms"`
+		FileCount  int           `json:"file_count"`
+		FileMs     float64       `json:"file_ms"`
+		RedisCount int           `json:"redis_count"`
+		RedisMs    float64       `json:"redis_ms"`
+		WP         int           `json:"wp"`
+		N1         int           `json:"n1"`
+		Level      string        `json:"level"`
+		PhpVersion string        `json:"php_version,omitempty"`
+		Profiled   int           `json:"profiled"`
+		App        string        `json:"app,omitempty"`
 		Queries    []interface{} `json:"queries"`
 		HTTPCalls  []interface{} `json:"http_calls"`
 		Marks      []interface{} `json:"marks"`
@@ -570,17 +575,17 @@ func (a *API) handleDomainStats(w http.ResponseWriter, r *http.Request) {
 	domainFilter := "%" + domain + "%"
 
 	var stats struct {
-		Domain       string  `json:"domain"`
-		Requests     int64   `json:"requests"`
-		AvgMs        float64 `json:"avg_duration_ms"`
-		MaxMs        float64 `json:"max_duration_ms"`
-		P95Ms        float64 `json:"p95_duration_ms"`
-		Errors       int64   `json:"errors"`
-		N1Count      int64   `json:"n1_count"`
-		TotalQueries int64   `json:"total_queries"`
-		TotalHTTP    int64   `json:"total_http_calls"`
-		Owner        string  `json:"owner,omitempty"`
-		OwnerUID     uint32  `json:"owner_uid,omitempty"`
+		Domain       string        `json:"domain"`
+		Requests     int64         `json:"requests"`
+		AvgMs        float64       `json:"avg_duration_ms"`
+		MaxMs        float64       `json:"max_duration_ms"`
+		P95Ms        float64       `json:"p95_duration_ms"`
+		Errors       int64         `json:"errors"`
+		N1Count      int64         `json:"n1_count"`
+		TotalQueries int64         `json:"total_queries"`
+		TotalHTTP    int64         `json:"total_http_calls"`
+		Owner        string        `json:"owner,omitempty"`
+		OwnerUID     uint32        `json:"owner_uid,omitempty"`
 		TopURIs      []interface{} `json:"top_uris"`
 		SlowQueries  []interface{} `json:"slow_queries"`
 	}
@@ -1262,8 +1267,8 @@ func (a *API) handlePhpVersions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]interface{}{
-		"versions":      versions,
-		"count":         len(versions),
+		"versions":       versions,
+		"count":          len(versions),
 		"window_minutes": windowMin,
 	})
 }
@@ -1484,4 +1489,46 @@ func cmdAPI(args []string) {
 	if err := http.ListenAndServe(*addr, api.router); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
+}
+
+// handleDiagShare publikuje raport i oddaje adres do wyslania komus.
+//
+// Ta sama droga co `phpray-collector report --share`, tylko z panelu:
+// wysylamy DANE ustalen, serwer renderuje je wlasnym szablonem. Nazwa
+// strony jest wycinana z kazdego pola tekstowego przez BezNazwyStrony().
+func (a *API) handleDiagShare(w http.ResponseWriter, r *http.Request) {
+	domain := chi.URLParam(r, "domain")
+	windowMin := queryInt(r, "window", 60)
+
+	if allowed := AllowedDomains(r); allowed != nil {
+		found := false
+		for _, d := range allowed {
+			if strings.Contains(domain, d) || strings.Contains(d, domain) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeError(w, 403, "domain not in your allowed list")
+			return
+		}
+	}
+
+	ctx, err := a.store.LoadTracesForDiag(domain, windowMin)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	engine := NewDiagEngine()
+	report := engine.Analyze(ctx)
+	report.WindowMin = windowMin
+
+	url, wygasa, err := opublikujRaport(report, "")
+	if err != nil {
+		writeError(w, 502, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_ = json.NewEncoder(w).Encode(map[string]any{"url": url, "expires_at": wygasa})
 }

@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.15.10 — 2026-09-23
+
+**A published report said `the site/checkout/`.** The scrubber replaces the
+domain with the words "the site", which reads correctly in a sentence and
+wrongly in an address: evidence lines quote URLs, so the slowest path came
+out as `the site/checkout/: 104 N+1 requests`. Found on a real published
+report, not in a test. A name followed by a path is now dropped entirely,
+with or without scheme and `www.`, leaving `/checkout/`. The behaviour has
+its own test, which the function did not have before.
+
+**The collector spoke Polish.** `phpray-collector update` printed its whole
+conversation — what it downloaded, whether the checksum matched, what to
+restart afterwards — in Polish, and so did the message after `report
+--share`. Both are on the path a first-time user walks, and buyers are
+outside Poland. All of it is English now; the code comments stay Polish.
+
+After a report is published, the last line says that sites can be kept in
+one list, with a link to the plans. It is the one place where the tool
+mentions the paid console, it appears once, after something worked, and it
+is read by the person who has just sent someone else's report on.
+
+## 0.15.9 — 2026-09-22
+
+**A report you can send as a link, not a file.** People share links; an
+attachment has to be saved, found and forwarded. Every published report is a
+page carrying our name, read by someone who has just learned their site is
+slow — and none of it costs anything per reader.
+
+- `phpray-collector report --domain example.com --share` publishes the
+  findings and prints a link. No account, no card: the local core is
+  Apache-2.0 and this works from it.
+- The local dashboard has a **Share a link** button next to Export Report,
+  which copies the URL straight to the clipboard.
+- What gets sent is **data**, not a document: the server renders it with its
+  own template, so nothing in a report can become markup on someone else's
+  screen. The published page is anonymised, expires after 30 days, is not
+  indexed, and its address carries 128 bits of randomness.
+- The site name is stripped from **every text field**, not just the one named
+  after it. The first version removed the field and published
+  `example.com: 1 critical issue(s) found` in the summary — found on
+  production, the document was deleted within minutes and the scrubbing is
+  now a package-level function used by both report paths, with a test that
+  walks every field.
+
+**The extension no longer wedges its own ring buffer.** 0.15.8 fixed the
+reader; this fixes the writer. The reader's repair needs an updated
+collector, so a ring could still be dead where only the extension was new.
+Free space is computed through one guarded helper now, at all three places
+that used to subtract positions directly — the third was found only by
+listing every occurrence, after fixing the first two.
+
+The extension version moves to 0.15.9 because its source changed; it had
+stayed at 0.15.5 through three releases that did not touch it.
+
 ## 0.15.8 — 2026-09-22
 
 **A wedged ring buffer silently discarded every trace, forever.** This is the

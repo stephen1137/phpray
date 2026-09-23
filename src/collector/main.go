@@ -22,7 +22,7 @@ import (
 	"time"
 )
 
-const version = "0.15.8" // 0.15.8: naprawa zakleszczonego ringu — pozycja czytania przed pozycja zapisu kazala pisarzowi uznawac bufor za pelny NA ZAWSZE; na h2 gubilo to 23,4% sladow, jedno konto 90%. 0.15.7: 0.15.7: `phpray-collector update` — kanal aktualizacji z weryfikacja SHA-256; do tej wersji kolektor nie mial jak dowiedziec sie o nowym wydaniu ani sie zaktualizowac, przez co nasz wlasny h2 siedzial dwa wydania w tyle. 0.15.6: 0.15.6: pierwsze uruchomienie bez strasznych błędów, podpowiedzi bez systemd, panel kieruje na /en/cloud; rozszerzenie bez zmian od 0.15.5. 0.15.5: wyścig przy zapisie do ringu, top, panel lokalny, MCP; ingest protocol v1 frozen since 0.14
+const version = "0.15.10" // 0.15.10: opublikowany raport pisal "the site/checkout/" tam, gdzie nazwa strony stala przed sciezka — teraz zostaje sam adres. 0.15.9: `report --share` i przycisk w panelu — raport jako LINK, nie plik; pisarz ringu utwardzony (0.15.8 naprawil czytelnika). 0.15.8: 0.15.8: naprawa zakleszczonego ringu — pozycja czytania przed pozycja zapisu kazala pisarzowi uznawac bufor za pelny NA ZAWSZE; na h2 gubilo to 23,4% sladow, jedno konto 90%. 0.15.7: 0.15.7: `phpray-collector update` — kanal aktualizacji z weryfikacja SHA-256; do tej wersji kolektor nie mial jak dowiedziec sie o nowym wydaniu ani sie zaktualizowac, przez co nasz wlasny h2 siedzial dwa wydania w tyle. 0.15.6: 0.15.6: pierwsze uruchomienie bez strasznych błędów, podpowiedzi bez systemd, panel kieruje na /en/cloud; rozszerzenie bez zmian od 0.15.5. 0.15.5: wyścig przy zapisie do ringu, top, panel lokalny, MCP; ingest protocol v1 frozen since 0.14
 
 func main() {
 	if len(os.Args) < 2 {
@@ -99,7 +99,9 @@ Auth:
   token         Generate a JWT token for API authentication
 
 Reports:
-  report        Generate diagnostic report (markdown/text) to stdout
+  report        Generate diagnostic report (markdown/text/html) to stdout.
+                --share publishes the findings and prints a link you can send
+                to someone; the site name is removed and the link expires.
 
 Control table (on-demand profiling, shared memory read by the extension at RINIT):
   control list                                  Show entries
@@ -202,6 +204,8 @@ func cmdReport(args []string) {
 	format := fs.String("format", "markdown", "Output format: markdown, text or html")
 	anonim := fs.Bool("anonymize", false, "replace the domain name in the output, so the report can be shared publicly")
 	out := fs.String("o", "", "write to this file instead of stdout")
+	share := fs.Bool("share", false, "publish the findings and print a link you can send to someone (site name removed)")
+	shareTo := fs.String("share-url", "", "where to publish (default https://app.phpray.dev/r)")
 	fs.Parse(args)
 
 	if *domain == "" {
@@ -226,6 +230,19 @@ func cmdReport(args []string) {
 	engine := NewDiagEngine()
 	report := engine.Analyze(ctx)
 	report.WindowMin = *windowMin
+
+	// Publikacja PRZED formatowaniem: wysylamy dane ustalen, nie dokument.
+	// Serwer renderuje je wlasnym szablonem, wiec nic stad nie moze stac sie
+	// znacznikiem u odbiorcy.
+	if *share {
+		url, wygasa, err := opublikujRaport(report, *shareTo)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Could not publish the report: %v\n", err)
+			os.Exit(1)
+		}
+		wypiszAdres(url, wygasa)
+		return
+	}
 
 	var tresc string
 	switch *format {

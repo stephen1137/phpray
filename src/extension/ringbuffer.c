@@ -373,6 +373,26 @@ static inline void phpray_publish_header(uint8_t *slot, uint32_t len, uint8_t ty
     __atomic_store_n((uint32_t *)(void *)slot, len, __ATOMIC_RELEASE);
 }
 
+/* Zajetosc ringu, odporna na odwrocenie pozycji.
+ *
+ * write_pos - read_pos na uint64 przewija sie pod zero, gdy pozycja czytania
+ * wyprzedzi zapis. Wynik rzedu 10^19 sprawia, ze warunek "czy sie zmiesci"
+ * jest ZAWSZE prawdziwy, wiec pisarz odrzuca KAZDY kolejny rekord — na zawsze,
+ * az do skasowania pliku ringu. 22.09.2026 tak zakleszczone byly cztery ringi
+ * na h2: 24 654 zgubionych sladow z 80 501 (23,4 %), jedno konto gubilo 90 %
+ * ruchu. Obietnica produktu brzmi "kazde zadanie, nie probka" i na tej
+ * maszynie byla nieprawdziwa.
+ *
+ * Czytelnik (kolektor 0.15.8+) wykrywa odwrocenie i wyrownuje pozycje, ale to
+ * wymaga ZAKTUALIZOWANEGO kolektora. Tutaj pisarz przestaje sie na tym
+ * zakleszczac sam z siebie: stan odwrocony znaczy "nic nie zalega", wiec
+ * zapisujemy dalej zamiast gubic wszystko.
+ */
+static inline uint64_t phpray_ring_used(uint64_t write_pos, uint64_t read_pos)
+{
+    return (write_pos >= read_pos) ? (write_pos - read_pos) : 0;
+}
+
 int phpray_ring_write(phpray_ring_t *ring, const void *data, uint32_t len, uint8_t type) {
     phpray_ring_header_t *hdr;
     phpray_ring_record_t rec_hdr;
@@ -399,7 +419,7 @@ int phpray_ring_write(phpray_ring_t *ring, const void *data, uint32_t len, uint8
         /* Check if buffer has enough free space.
          * Free space = capacity - (write_pos - read_pos).
          * We need padded_total bytes plus room for a potential padding record. */
-        uint64_t used = write_pos - read_pos;
+        uint64_t used = phpray_ring_used(write_pos, read_pos);
         if (used + padded_total + sizeof(phpray_ring_record_t) > capacity) {
             /* Buffer full — drop this record */
             ATOMIC_ADD(&hdr->drop_count, 1);
@@ -415,7 +435,7 @@ int phpray_ring_write(phpray_ring_t *ring, const void *data, uint32_t len, uint8
             new_write_pos = write_pos + tail_space;
 
             /* Check that wrapping + our record still fits */
-            uint64_t used_after_pad = new_write_pos - read_pos;
+            uint64_t used_after_pad = phpray_ring_used(new_write_pos, read_pos);
             if (used_after_pad + padded_total > capacity) {
                 ATOMIC_ADD(&hdr->drop_count, 1);
                 return -1;
@@ -443,7 +463,7 @@ int phpray_ring_write(phpray_ring_t *ring, const void *data, uint32_t len, uint8
             uint64_t pad_size = tail_space;
             new_write_pos = write_pos + pad_size;
 
-            uint64_t used_after_pad = new_write_pos - read_pos;
+            uint64_t used_after_pad = phpray_ring_used(new_write_pos, read_pos);
             if (used_after_pad + padded_total > capacity) {
                 ATOMIC_ADD(&hdr->drop_count, 1);
                 return -1;

@@ -87,6 +87,24 @@ Diagnostic report for one site, markdown or text, to stdout:
 phpray report -domain shop.example.com -w 60 -format markdown > report.md
 ```
 
+Add `-share` and the findings are published as a page instead, and the
+command prints a link you can send to someone:
+
+```bash
+phpray report -domain shop.example.com -w 60 -share
+https://app.phpray.dev/r/dklns4bdbf74bdtetbxhbxtcey
+```
+
+No account and no card: this works from the open-source collector. What
+leaves the server is the **findings data**, never the document — the page is
+rendered from that data by our template. The site name is stripped from every
+text field, including evidence lines, so `shop.example.com/checkout/` is
+published as `/checkout/`. The address carries 128 bits of randomness,
+expires after 30 days and is not indexed by search engines.
+
+Use `-share-url` to publish somewhere else, for example your own copy of the
+console.
+
 ## Service
 
 - `phpray serve -c /etc/phpray/collector.toml -addr 127.0.0.1:9191` — collector,
@@ -97,4 +115,8 @@ phpray report -domain shop.example.com -w 60 -format markdown > report.md
 - `phpray control list | set -docroot <dir> [-prefix /p] [-rate 100] [-ttl 600s] | clear -docroot <dir> | expire`
   — the on-demand profiling table read by the extension (the Cloud console
   writes the same table through the collector).
+- `phpray update` — checks `phpray.dev/dl/LATEST`, downloads the release for
+  this architecture, verifies it against `SHA256SUMS` and replaces the binary
+  in place, keeping the previous one next to it. The PHP extension updates
+  separately, through `install.sh`.
 - `phpray version`.

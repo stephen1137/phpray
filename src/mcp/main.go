@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-var version = "0.15.7"
+var version = "0.15.9"
 
 func main() {
 	for _, a := range os.Args[1:] {
@@ -43,6 +43,23 @@ func main() {
 			baza = "https://app.phpray.dev"
 		}
 		demo := strings.TrimSpace(os.Getenv("PHPRAY_DEMO_TOKEN"))
+		// Trwaly dziennik wywolan. Bez niego kazde wdrozenie kasowalo historie
+		// tego, kto uzywa publicznego serwera — a to jedyny kanal, ktory
+		// naprawde przyprowadza nam obcych ludzi. Brak zmiennej = piszemy
+		// tylko na stderr, jak dotad.
+		if d := strings.TrimSpace(os.Getenv("PHPRAY_DZIENNIK")); d != "" {
+			// Nieudany dziennik NIE MOZE zatrzymac serwera. 23.09.2026
+			// wdrozylem to z os.Exit(1) i publiczny endpoint wpadl w petle
+			// restartow — 502 dla kazdego, bo kontener dziala jako nonroot
+			// i nie mial prawa pisac do katalogu Caddy'ego. Dziennik sluzy
+			// do MIERZENIA kanalu, a nie do jego dzialania; brak pomiaru
+			// jest zawsze mniej kosztowny niz brak uslugi.
+			if err := otworzDziennik(d); err != nil {
+				fmt.Fprintln(os.Stderr, "phpray-mcp: dziennik wylaczony,", err)
+			} else {
+				fmt.Fprintln(os.Stderr, "phpray-mcp: dziennik wywolan w", d)
+			}
+		}
 		fmt.Fprintf(os.Stderr, "phpray-mcp %s: HTTP na %s, konsola %s, konto demo: %v\n",
 			version, adres, baza, demo != "")
 		if err := serwujHTTP(adres, baza, demo); err != nil {

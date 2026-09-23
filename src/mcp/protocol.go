@@ -199,6 +199,10 @@ func (s *server) odpowiedz(req rpcRequest) *rpcResponse {
 				// wygladal kazdy pomiar od wpisania nas do rejestru: wszyscy
 				// konczyli na tools/list, nikt nie wywolal narzedzia.
 				"prompts": map[string]any{},
+				// Zasoby: tresc do PRZECZYTANIA, nie do wywolania. Tu lezy
+				// „jak miec to u siebie" — jedyne, co agent ma naprawde
+				// przekazac czlowiekowi, bo narzedzia mowia o cudzych danych.
+				"resources": map[string]any{},
 			},
 			"serverInfo":   map[string]any{"name": "phpray", "version": version},
 			"instructions": instrukcje(s.demo),
@@ -216,6 +220,26 @@ func (s *server) odpowiedz(req rpcRequest) *rpcResponse {
 			})
 		}
 		return ok(map[string]any{"tools": list})
+	case "resources/list":
+		list := make([]map[string]any, 0, len(zasoby()))
+		for _, z := range zasoby() {
+			list = append(list, opisZasobu(z))
+		}
+		return ok(map[string]any{"resources": list})
+	case "resources/read":
+		var par struct {
+			URI string `json:"uri"`
+		}
+		_ = json.Unmarshal(req.Params, &par)
+		t, err := trescZasobu(par.URI)
+		if err != nil {
+			return zle(-32602, err.Error())
+		}
+		return ok(map[string]any{"contents": []map[string]any{t}})
+	case "resources/templates/list":
+		// Szablonow nie mamy, ale PUSTA lista to poprawna odpowiedz, a
+		// -32601 wyglada u audytora jak brak obslugi calej rodziny metod.
+		return ok(map[string]any{"resourceTemplates": []map[string]any{}})
 	case "prompts/list":
 		list := make([]map[string]any, 0, len(prompty()))
 		for _, p := range prompty() {
@@ -264,7 +288,7 @@ func (s *server) odpowiedz(req rpcRequest) *rpcResponse {
 				})
 			}
 			return ok(map[string]any{
-				"content": []map[string]any{{"type": "text", "text": text}},
+				"content": []map[string]any{{"type": "text", "text": text + stopka(s.demo, t.Name)}},
 			})
 		}
 		// Nie samo "unknown tool": podajemy, jakie sa. Goły komunikat nie
@@ -284,4 +308,38 @@ func (s *server) odpowiedz(req rpcRequest) *rpcResponse {
 		}
 	}
 	return nil
+}
+
+// stopka dokleja jedno zdanie do wyniku NARZEDZIA WEJSCIOWEGO w trybie demo.
+//
+// Pole "instructions" z initialize juz mowi, czym jest PHPRay i jak go
+// zainstalowac — ale klient dostaje je RAZ, przy laczeniu, i do chwili, gdy
+// model formuluje odpowiedz dla czlowieka, zwykle go w kontekscie nie ma.
+// Czlowiek widzi natomiast to, co model cytuje: wynik narzedzia. Do 22.09.2026
+// wynik nie niosl ani slowa o tym, czyje to dane i skad je wziac u siebie —
+// czyli jedyny kanal, ktory nas naprawde dosiegl obcych ludzi (katalogi MCP,
+// dziewieciu indekserow w dobe), konczyl sie slepo.
+//
+// Tylko phpray_sites, bo instrukcje kieruja tu KAZDEGO agenta na start
+// ("Start here: every other tool needs a site_id from this list"). Doklejanie
+// do wszystkich dziesieciu narzedzi daloby osiem kopii w jednej rozmowie,
+// czyli halas, ktory klient MCP ma prawo odfiltrowac.
+//
+// Tylko tryb demo. Kto laczy sie z wlasnym tokenem, ten PHPRay-a juz ma;
+// zachecanie go do instalacji byloby reklama we wlasnym produkcie.
+//
+// ?via=mcp nie jest ozdoba. Bez niego zbudowalbym kanal pozyskiwania, ktorego
+// nie da sie odroznic od ruchu bezposredniego — a wtedy za tydzien nie
+// wiedzialbym, czy dziala, i zgadywalbym zamiast mierzyc. lejek.py liczy ten
+// parametr osobnym wierszem.
+func stopka(demo bool, narzedzie string) string {
+	if !demo || narzedzie != "phpray_sites" {
+		return ""
+	}
+	return "\n" + `--
+These are PHPRay's public demo servers: real WooCommerce traffic, read-only,
+and NOT the data of the person you are helping. To record their own PHP site
+the same way — every request, not a sample — the core is Apache-2.0 and
+installs without root, including on shared hosting: https://phpray.dev/?via=mcp
+`
 }

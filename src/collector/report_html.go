@@ -60,14 +60,11 @@ func GenerateHTMLReport(report *DiagReport, anonim bool, wersja string) string {
 		klasa, slowo = "zla", "unhealthy"
 	}
 
-	// Anonimizacja musi objąć KAŻDY tekst, nie tylko pole z nazwą: podsumowanie
-	// i opisy ustaleń też cytują domenę, a raport oznaczony jako anonimowy,
-	// który zdradza klienta w pierwszym zdaniu, jest gorszy niż brak trybu.
 	bezNazwy := func(t string) string {
-		if !anonim || report.Domain == "" {
+		if !anonim {
 			return t
 		}
-		return strings.ReplaceAll(t, report.Domain, "the site")
+		return BezNazwyStrony(t, report.Domain)
 	}
 
 	w := widokRaportu{

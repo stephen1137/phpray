@@ -1,12 +1,12 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
   "name": "dev.phpray/phpray",
-  "description": "Why is this PHP site slow? Real request traces: SQL, outbound HTTP, errors, N+1. Demo needs no key.",
+  "description": "Ask an agent why a PHP site is slow: every request with its SQL, HTTP calls, errors and N+1.",
   "repository": {
     "url": "https://github.com/stephen1137/phpray",
     "source": "github"
   },
-  "version": "0.15.6",
+  "version": "0.15.9",
   "websiteUrl": "https://phpray.dev/mcp-server/",
   "remotes": [
     {

@@ -1135,6 +1135,33 @@ print_summary() {
         done
     fi
 
+    # Wersja ROZSZERZENIA, nie tylko kolektora.
+    #
+    # 23.09.2026 zainstalowalem PHPRay-a na czystym Debianie dokladnie tak, jak
+    # mowi dokumentacja. Instalator napisal "Release: v0.15.8", a `php -m`
+    # i `phpversion("phpray")` pokazaly **0.15.5** — bo plik .so publikowany
+    # jako 0.15.6, 0.15.7 i 0.15.8 jest bajt w bajt tym samym plikiem co 0.15.5
+    # (ta sama suma SHA-256). Rozszerzenie po prostu nie zmienialo sie miedzy
+    # tymi wydaniami i binarka zostala przeniesiona dalej.
+    #
+    # Kopiowanie niezmienionej binarki jest w porzadku. Niepowiedzenie o tym
+    # nie jest: uwazny deweloper — czyli dokladnie nasz odbiorca — widzi
+    # rozbieznosc i uznaje, ze instalacja sie nie udala. Wypisujemy wiec
+    # wersje, ktora NAPRAWDE siedzi w PHP.
+    for i in "${!RES_PHP[@]}"; do
+        if [ "${RES_STATUS[$i]}" = "installed" ]; then
+            ev="$("${RES_PHP[$i]}" -r 'echo phpversion("phpray");' 2>/dev/null || true)"
+            if [ -n "$ev" ]; then
+                if [ -n "${VERSION:-}" ] && [ "$ev" != "$VERSION" ]; then
+                    log_info "Extension: $ev (release $VERSION ships this build unchanged)"
+                else
+                    log_info "Extension: $ev"
+                fi
+            fi
+            break
+        fi
+    done
+
     if [ "$COLLECTOR_INSTALLED" = "1" ]; then
         if command -v phpray-collector >/dev/null 2>&1; then
             cv="$(phpray-collector --version 2>/dev/null || true)"
