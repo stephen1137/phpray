@@ -1,13 +1,12 @@
 # WordPress plugin
 
 The PHPRay WordPress plugin gives you the application layer of PHPRay on
-any host — including shared hosting — **without the PHP extension**.
-Version 0.1.1 is a direct download:
-[phpray-wordpress-0.1.1.zip](https://phpray.dev/downloads/phpray-wordpress-0.1.1.zip)
-(Plugins → Add New → Upload Plugin). Listing in the WordPress.org directory
-is planned. The previous build,
-[phpray-wordpress-0.1.0.zip](https://phpray.dev/downloads/phpray-wordpress-0.1.0.zip),
-stays available; it only works in `file` mode.
+any host — including shared hosting — **without the PHP extension**. It is a
+direct download from
+[phpray.dev/dl/phpray-wordpress.zip](https://phpray.dev/dl/phpray-wordpress.zip)
+(Plugins → Add New → Upload Plugin); that address always points at the newest
+release, and every release also keeps a versioned copy under
+[phpray.dev/dl/](https://phpray.dev/dl/).
 
 ## What it captures
 
