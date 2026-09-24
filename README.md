@@ -4,7 +4,8 @@
 
 PHPRay is always-on request tracing for PHP. It records wall time, CPU, memory, SQL,
 outbound HTTP, errors and N+1 patterns for **every** request, not a sample, and on a
-small share of requests it adds a per-plugin / per-component time breakdown.
+small share of requests it adds a per-plugin / per-component time breakdown. One site
+or a hundred client sites: the same install, and one list for all of them.
 
 It is a PHP extension plus a local collector. No agent that needs root, no network
 egress from the PHP process, no SaaS account required. It runs on shared hosting
@@ -45,6 +46,33 @@ and database time, the plugins that spent it, and the queries behind it. Demo da
 plugin, a named query and the day it changed:
 
 ![Per-component breakdown: which plugin costs how much](docs/img/dashboard-components.jpg)
+
+## If you look after more than one site
+
+Most of what is written above is about one server. The harder job is the other one:
+forty sites you did not build, on hosting you did not choose, and a client asking why
+checkout is slow today.
+
+- **One list instead of forty panels.** Every site in one console with requests, p95,
+  error rate and database share, sorted by what is failing now — then one click into a
+  single request. The [live demo](https://app.phpray.dev/demo) is a fleet of ten sites
+  of one agency, read-only, no account.
+- **It installs where your clients actually are.** Shared hosting without root, one
+  account at a time: the extension loads from the account's own `php.ini`, or the
+  [WordPress plugin](https://phpray.dev/docs/usage/wordpress-plugin) runs with neither
+  an extension nor a daemon. Never enable the extension for a whole PHP version on a
+  shared server — install it per account.
+- **A report you can send to the client.** `phpray report -domain shop.example -share`
+  publishes the findings and prints a link. The site name is stripped, the address
+  expires and is not indexed. No account, no card.
+- **For hosting providers.** A DirectAdmin plugin with an admin view over every account
+  and a user view for the customer, plus a self-hosted console — see
+  [Host Edition](https://phpray.dev/en/pricing).
+
+The local core stays Apache-2.0 and has no limits: as many sites, servers and requests
+as you like, data on your own disk. What costs money is the hosted console that puts
+those sites in one list — priced by how many sites you keep in it, starting with one
+site free. Prices are on [phpray.dev/en/pricing](https://phpray.dev/en/pricing).
 
 ## Why another profiler
 
